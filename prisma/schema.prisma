@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Transaction {
+  id             String           @id @default(cuid())
+  date           DateTime
+  name           String
+  normalizedName String
+  debit          Float            @default(0)
+  credit         Float            @default(0)
+  source         String           @default("")
+  notes          String           @default("")
+  csvHash        String           @unique
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  tags           TransactionTag[]
+
+  @@index([normalizedName])
+  @@index([date])
+}
+
+model Tag {
+  id           String           @id @default(cuid())
+  name         String
+  color        String           @default("#6B7280")
+  isSource     Boolean          @default(false)
+  parentId     String?
+  parent       Tag?             @relation("TagHierarchy", fields: [parentId], references: [id])
+  children     Tag[]            @relation("TagHierarchy")
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  transactions TransactionTag[]
+  budgetLines  BudgetLineTag[]
+  autoTagRules AutoTagRule[]
+  csvMappings  CsvMapping[]
+}
+
+model TransactionTag {
+  id            String      @id @default(cuid())
+  transactionId String
+  tagId         String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  tag           Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([transactionId, tagId])
+}
+
+model BudgetLine {
+  id        String          @id @default(cuid())
+  name      String
+  period    String // "monthly" | "biweekly" | "yearly"
+  amount    Float
+  rollover  Boolean         @default(false)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  tags      BudgetLineTag[]
+}
+
+model BudgetLineTag {
+  id           String     @id @default(cuid())
+  budgetLineId String
+  tagId        String
+  budgetLine   BudgetLine @relation(fields: [budgetLineId], references: [id], onDelete: Cascade)
+  tag          Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([budgetLineId, tagId])
+}
+
+model CsvMapping {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  dateColumn   String
+  nameColumn   String
+  debitColumn  String
+  creditColumn String
+  sourceColumn String   @default("")
+  dateFormat   String   @default("YYYY-MM-DD")
+  sourceTagId  String?
+  sourceTag    Tag?     @relation(fields: [sourceTagId], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+model AutoTagRule {
+  id        String   @id @default(cuid())
+  pattern   String
+  matchType String // "exact" | "regex"
+  tagId     String
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
