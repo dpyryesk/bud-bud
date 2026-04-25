@@ -1,11 +1,31 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Upload, FileSpreadsheet, Check, AlertCircle } from 'lucide-react';
+import {
+  Upload,
+  FileSpreadsheet,
+  Check,
+  AlertCircle,
+  ChevronRight,
+  Trash2,
+  Eye,
+  Loader2,
+  Plus,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import {
   Select,
   SelectContent,
@@ -13,7 +33,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { ImportResult } from '@/types';
+import type { ImportPreview, ImportResult, ParsedTransaction } from '@/types';
+
+// ---- Local types ----
 
 type CsvMapping = {
   id: string;
@@ -27,43 +49,144 @@ type CsvMapping = {
   sourceTagId: string | null;
 };
 
-type SourceTag = {
-  id: string;
-  name: string;
-  color: string;
+type SourceTag = { id: string; name: string; color: string };
+
+type Step = 'upload' | 'configure' | 'preview' | 'done';
+
+// ---- Constants ----
+
+const STEPS: Step[] = ['upload', 'configure', 'preview', 'done'];
+const STEP_LABELS: Record<Step, string> = {
+  upload: 'Upload',
+  configure: 'Configure',
+  preview: 'Preview',
+  done: 'Done',
 };
+
+const DATE_FORMATS = [
+  { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD (ISO)' },
+  { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY (US)' },
+  { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY (EU)' },
+  { value: 'MM-DD-YYYY', label: 'MM-DD-YYYY' },
+];
+
+// ---- Sub-components ----
+
+function StepIndicator({ current }: { current: Step }) {
+  const currentIndex = STEPS.indexOf(current);
+  return (
+    <nav className="mb-6 flex flex-wrap items-center gap-1">
+      {STEPS.map((s, i) => {
+        const done = i < currentIndex;
+        const active = i === currentIndex;
+        return (
+          <div key={s} className="flex items-center gap-1">
+            <div
+              className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors ${
+                active
+                  ? 'bg-primary text-primary-foreground'
+                  : done
+                    ? 'bg-green-600 text-white'
+                    : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              {done ? <Check className="h-3.5 w-3.5" /> : i + 1}
+            </div>
+            <span
+              className={`text-sm ${active ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}
+            >
+              {STEP_LABELS[s]}
+            </span>
+            {i < STEPS.length - 1 && (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
+function RowStatusBadge({ row }: { row: ParsedTransaction }) {
+  if (row.error) {
+    return (
+      <Badge variant="destructive" className="text-xs">
+        Error
+      </Badge>
+    );
+  }
+  if (row.isDuplicateInDb) {
+    return (
+      <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-200 text-xs">
+        Duplicate
+      </Badge>
+    );
+  }
+  if (row.isDuplicateInCsv) {
+    return (
+      <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100 dark:bg-orange-900 dark:text-orange-200 text-xs">
+        CSV Dup
+      </Badge>
+    );
+  }
+  return (
+    <Badge className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900 dark:text-green-200 text-xs">
+      New
+    </Badge>
+  );
+}
+
+// ---- Main component ----
 
 export default function ImportPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [step, setStep] = useState<Step>('upload');
+
+  // Upload
   const [file, setFile] = useState<File | null>(null);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
-  const [csvPreview, setCsvPreview] = useState<string[][]>([]);
+  const [csvRawPreview, setCsvRawPreview] = useState<string[][]>([]);
+
+  // Mapping config lists
   const [mappings, setMappings] = useState<CsvMapping[]>([]);
   const [sourceTags, setSourceTags] = useState<SourceTag[]>([]);
   const [selectedMappingId, setSelectedMappingId] = useState<string>('');
-  const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<ImportResult | null>(null);
 
-  // New mapping form
-  const [newMappingName, setNewMappingName] = useState('');
+  // Mapping form fields
+  const [mappingName, setMappingName] = useState('');
   const [dateColumn, setDateColumn] = useState('');
   const [nameColumn, setNameColumn] = useState('');
   const [debitColumn, setDebitColumn] = useState('');
   const [creditColumn, setCreditColumn] = useState('');
-  const [sourceColumn, setSourceColumn] = useState('');
+  const [sourceColumn, setSourceColumn] = useState<string | null>('');
   const [dateFormat, setDateFormat] = useState('YYYY-MM-DD');
-  const [selectedSourceTagId, setSelectedSourceTagId] = useState<string>('');
-  const [showNewMapping, setShowNewMapping] = useState(false);
+  const [sourceTagId, setSourceTagId] = useState<string | null>('');
+
+  // Preview
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
+
+  // Import result
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<ImportResult | null>(null);
+
+  // ---- Data fetching ----
 
   const fetchMappings = useCallback(async () => {
     const res = await fetch('/api/csv-mappings');
-    setMappings(await res.json());
+    if (res.ok) setMappings(await res.json());
   }, []);
 
   const fetchSourceTags = useCallback(async () => {
     const res = await fetch('/api/tags');
-    const tags = await res.json();
-    setSourceTags(tags.filter((t: SourceTag & { isSource: boolean }) => t.isSource));
+    if (res.ok) {
+      const tags = await res.json();
+      setSourceTags(
+        tags.filter((t: SourceTag & { isSource: boolean }) => t.isSource),
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -71,10 +194,35 @@ export default function ImportPage() {
     fetchSourceTags();
   }, [fetchMappings, fetchSourceTags]);
 
+  // ---- Handlers ----
+
+  const loadMappingIntoForm = useCallback((m: CsvMapping) => {
+    setMappingName(m.name);
+    setDateColumn(m.dateColumn);
+    setNameColumn(m.nameColumn);
+    setDebitColumn(m.debitColumn);
+    setCreditColumn(m.creditColumn);
+    setSourceColumn(m.sourceColumn || '');
+    setDateFormat(m.dateFormat || 'YYYY-MM-DD');
+    setSourceTagId(m.sourceTagId || '');
+  }, []);
+
+  const clearMappingForm = useCallback(() => {
+    setMappingName('');
+    setDateColumn('');
+    setNameColumn('');
+    setDebitColumn('');
+    setCreditColumn('');
+    setSourceColumn('');
+    setDateFormat('YYYY-MM-DD');
+    setSourceTagId('');
+  }, []);
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
     setFile(f);
+    setPreview(null);
     setResult(null);
 
     const text = await f.text();
@@ -82,59 +230,101 @@ export default function ImportPage() {
     if (lines.length > 0) {
       const headers = lines[0].split(',').map((h) => h.trim().replace(/^"(.*)"$/, '$1'));
       setCsvHeaders(headers);
-
-      const preview = lines.slice(1, 6).map((line) =>
+      const rawPreview = lines.slice(1, 6).map((line) =>
         line.split(',').map((c) => c.trim().replace(/^"(.*)"$/, '$1')),
       );
-      setCsvPreview(preview);
+      setCsvRawPreview(rawPreview);
     }
+  };
+
+  const handleSelectSavedMapping = (id: string) => {
+    setSelectedMappingId(id);
+    const m = mappings.find((m) => m.id === id);
+    if (m) loadMappingIntoForm(m);
+  };
+
+  const handleClearSavedMapping = () => {
+    setSelectedMappingId('');
+    clearMappingForm();
   };
 
   const handleSaveMapping = async () => {
-    if (!newMappingName || !dateColumn || !nameColumn || !debitColumn || !creditColumn) return;
-
-    await fetch('/api/csv-mappings', {
+    if (!mappingName || !dateColumn || !nameColumn || !debitColumn || !creditColumn) return;
+    const res = await fetch('/api/csv-mappings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: newMappingName,
+        name: mappingName,
         dateColumn,
         nameColumn,
         debitColumn,
         creditColumn,
-        sourceColumn,
+        sourceColumn: sourceColumn || '',
         dateFormat,
-        sourceTagId: selectedSourceTagId || null,
+        sourceTagId: sourceTagId || null,
       }),
     });
-
-    await fetchMappings();
-    setShowNewMapping(false);
+    if (res.ok) {
+      await fetchMappings();
+    }
   };
 
-  const getActiveMapping = (): CsvMapping | null => {
-    if (selectedMappingId) {
-      return mappings.find((m) => m.id === selectedMappingId) || null;
+  const handleDeleteMapping = async (id: string) => {
+    await fetch(`/api/csv-mappings/${id}`, { method: 'DELETE' });
+    if (selectedMappingId === id) {
+      setSelectedMappingId('');
+      clearMappingForm();
     }
-    if (showNewMapping && dateColumn && nameColumn && debitColumn && creditColumn) {
-      return {
-        id: '',
-        name: newMappingName,
-        dateColumn,
-        nameColumn,
-        debitColumn,
-        creditColumn,
-        sourceColumn,
-        dateFormat,
-        sourceTagId: selectedSourceTagId || null,
-      };
+    await fetchMappings();
+  };
+
+  const getMappingForImport = () => {
+    if (!dateColumn || !nameColumn || !debitColumn || !creditColumn) return null;
+    return {
+      name: mappingName,
+      dateColumn,
+      nameColumn,
+      debitColumn,
+      creditColumn,
+      sourceColumn: sourceColumn && sourceColumn !== 'none' ? sourceColumn : '',
+      dateFormat,
+      sourceTagId: sourceTagId && sourceTagId !== 'none' ? sourceTagId : null,
+    };
+  };
+
+  const handleLoadPreview = async () => {
+    if (!file) return;
+    const mapping = getMappingForImport();
+    if (!mapping) return;
+
+    setPreviewLoading(true);
+    setPreviewError('');
+    setPreview(null);
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('mapping', JSON.stringify(mapping));
+
+    try {
+      const res = await fetch('/api/import/preview', { method: 'POST', body: formData });
+      if (!res.ok) {
+        const err = await res.json();
+        setPreviewError(err.error || 'Preview failed');
+      } else {
+        const data = await res.json();
+        setPreview(data);
+        setStep('preview');
+      }
+    } catch (e) {
+      setPreviewError('Preview failed: ' + String(e));
+    } finally {
+      setPreviewLoading(false);
     }
-    return null;
   };
 
   const handleImport = async () => {
     if (!file) return;
-    const mapping = getActiveMapping();
+    const mapping = getMappingForImport();
     if (!mapping) return;
 
     setImporting(true);
@@ -150,245 +340,622 @@ export default function ImportPage() {
     try {
       const res = await fetch('/api/import', { method: 'POST', body: formData });
       const data = await res.json();
+      if (!res.ok) {
+        setResult({ total: 0, imported: 0, duplicates: 0, errors: 1 });
+        console.error('Import failed:', data?.error || data);
+        return;
+      }
+
       setResult(data);
     } catch (e) {
-      setResult({ total: 0, imported: 0, duplicates: 0, errors: 1 });
       console.error('Import failed:', e);
+      setResult({ total: 0, imported: 0, duplicates: 0, errors: 1 });
     } finally {
       setImporting(false);
+      setStep('done');
     }
   };
+
+  const handleReset = () => {
+    setFile(null);
+    setCsvHeaders([]);
+    setCsvRawPreview([]);
+    setPreview(null);
+    setResult(null);
+    setSelectedMappingId('');
+    setStep('upload');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const mappingIsReady = !!(dateColumn && nameColumn && debitColumn && creditColumn);
+  const hasSourceColumn = preview?.rows.some((r) => r.source);
+
+  // ---- Render ----
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Import Transactions</h1>
+      <StepIndicator current={step} />
 
-      {/* File Upload */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="h-5 w-5" />
-            CSV File
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div
-            className="cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors hover:border-primary"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Upload className="mx-auto h-8 w-8 text-muted-foreground" />
-            <p className="mt-2 text-sm text-muted-foreground">
-              {file ? file.name : 'Click to select a CSV file'}
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              className="hidden"
-              onChange={handleFileSelect}
-            />
-          </div>
+      {/* ─── STEP 1: Upload ─── */}
+      {step === 'upload' && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5" />
+                CSV File
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div
+                className="cursor-pointer rounded-lg border-2 border-dashed p-10 text-center transition-colors hover:border-primary"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const f = e.dataTransfer.files[0];
+                  if (f && f.name.endsWith('.csv')) {
+                    // Simulate file input change
+                    const dt = new DataTransfer();
+                    dt.items.add(f);
+                    if (fileInputRef.current) {
+                      fileInputRef.current.files = dt.files;
+                      fileInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                  }
+                }}
+              >
+                <Upload className="mx-auto h-10 w-10 text-muted-foreground" />
+                <p className="mt-2 font-medium">
+                  {file ? file.name : 'Click or drag a CSV file here'}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {file ? `${(file.size / 1024).toFixed(1)} KB` : 'Accepted format: .csv'}
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+              </div>
 
-          {csvHeaders.length > 0 && (
-            <div className="mt-4">
-              <p className="text-sm font-medium">
-                Preview ({csvPreview.length} of {csvPreview.length}+ rows):
-              </p>
-              <div className="mt-2 overflow-x-auto">
-                <table className="text-xs">
-                  <thead>
-                    <tr>
-                      {csvHeaders.map((h, i) => (
-                        <th key={i} className="border px-2 py-1 text-left font-medium">
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {csvPreview.map((row, i) => (
-                      <tr key={i}>
-                        {row.map((cell, j) => (
-                          <td key={j} className="border px-2 py-1">
-                            {cell}
-                          </td>
+              {csvHeaders.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-2 text-sm font-medium text-muted-foreground">
+                    File preview — {csvHeaders.length} columns detected
+                  </p>
+                  <div className="overflow-x-auto rounded border">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted">
+                        <tr>
+                          {csvHeaders.map((h, i) => (
+                            <th key={i} className="whitespace-nowrap px-3 py-2 text-left font-medium">
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {csvRawPreview.map((row, i) => (
+                          <tr key={i} className="border-t">
+                            {row.map((cell, j) => (
+                              <td key={j} className="max-w-48 truncate px-3 py-1.5">
+                                {cell}
+                              </td>
+                            ))}
+                          </tr>
                         ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {file && csvHeaders.length > 0 && (
+            <Button size="lg" className="w-full" onClick={() => setStep('configure')}>
+              Next: Configure Mapping
+              <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
           )}
-        </CardContent>
-      </Card>
+        </>
+      )}
 
-      {/* Column Mapping */}
-      {csvHeaders.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Column Mapping</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {mappings.length > 0 && !showNewMapping && (
-              <div>
-                <Label>Use saved mapping</Label>
-                <Select value={selectedMappingId} onValueChange={(v) => { if (v !== null) { setSelectedMappingId(v); setShowNewMapping(false); } }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a mapping..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mappings.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button variant="link" className="mt-1 p-0 text-xs" onClick={() => { setShowNewMapping(true); setSelectedMappingId(''); }}>
-                  Or create a new mapping
-                </Button>
-              </div>
-            )}
-
-            {(showNewMapping || mappings.length === 0) && (
-              <div className="space-y-3">
+      {/* ─── STEP 2: Configure Mapping ─── */}
+      {step === 'configure' && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Column Mapping</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* Saved mappings list */}
+              {mappings.length > 0 && (
                 <div>
+                  <Label className="mb-2 block text-sm">Saved Mappings</Label>
+                  <div className="space-y-1.5">
+                    {mappings.map((m) => (
+                      <div
+                        key={m.id}
+                        className={`flex cursor-pointer items-center justify-between rounded-md border px-3 py-2 transition-colors ${
+                          selectedMappingId === m.id
+                            ? 'border-primary bg-primary/5'
+                            : 'hover:bg-muted/50'
+                        }`}
+                        onClick={() => handleSelectSavedMapping(m.id)}
+                      >
+                        <div className="min-w-0">
+                          <span className="text-sm font-medium">{m.name}</span>
+                          <span className="ml-2 truncate text-xs text-muted-foreground">
+                            {m.dateColumn} · {m.nameColumn} · {m.debitColumn}/{m.creditColumn}
+                          </span>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {selectedMappingId === m.id && (
+                            <Check className="h-4 w-4 text-primary" />
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteMapping(m.id);
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedMappingId && (
+                    <button
+                      className="mt-1.5 text-xs text-muted-foreground hover:text-foreground underline"
+                      onClick={handleClearSavedMapping}
+                    >
+                      Clear selection (configure manually)
+                    </button>
+                  )}
+                  <div className="my-4 border-t" />
+                </div>
+              )}
+
+              {/* Mapping form */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
                   <Label>Mapping Name</Label>
-                  <Input value={newMappingName} onChange={(e) => setNewMappingName(e.target.value)} placeholder="e.g., TD Bank" />
+                  <Input
+                    value={mappingName}
+                    onChange={(e) => setMappingName(e.target.value)}
+                    placeholder="e.g., TD Bank Chequing"
+                  />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Date Column</Label>
-                    <Select value={dateColumn} onValueChange={(v) => { if (v !== null) setDateColumn(v); }}>
-                      <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                      <SelectContent>
-                        {csvHeaders.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Date Format</Label>
-                    <Select value={dateFormat} onValueChange={(v) => { if (v !== null) setDateFormat(v); }}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
-                        <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
-                        <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
-                        <SelectItem value="MM-DD-YYYY">MM-DD-YYYY</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Name Column</Label>
-                    <Select value={nameColumn} onValueChange={(v) => { if (v !== null) setNameColumn(v); }}>
-                      <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                      <SelectContent>
-                        {csvHeaders.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Debit Column</Label>
-                    <Select value={debitColumn} onValueChange={(v) => { if (v !== null) setDebitColumn(v); }}>
-                      <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                      <SelectContent>
-                        {csvHeaders.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Credit Column</Label>
-                    <Select value={creditColumn} onValueChange={(v) => { if (v !== null) setCreditColumn(v); }}>
-                      <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                      <SelectContent>
-                        {csvHeaders.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Source Column (optional)</Label>
-                    <Select value={sourceColumn} onValueChange={(v) => { if (v !== null) setSourceColumn(v); }}>
-                      <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {csvHeaders.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div>
+                  <Label>
+                    Date Column <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={dateColumn}
+                    onValueChange={(v) => {
+                      if (v) setDateColumn(v);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select column..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {csvHeaders.map((h) => (
+                        <SelectItem key={h} value={h}>
+                          {h}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
+                <div>
+                  <Label>Date Format</Label>
+                  <Select
+                    value={dateFormat}
+                    onValueChange={(v) => {
+                      if (v) setDateFormat(v);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DATE_FORMATS.map((f) => (
+                        <SelectItem key={f.value} value={f.value}>
+                          {f.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>
+                    Description Column <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={nameColumn}
+                    onValueChange={(v) => {
+                      if (v) setNameColumn(v);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select column..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {csvHeaders.map((h) => (
+                        <SelectItem key={h} value={h}>
+                          {h}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>
+                    Debit Column <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={debitColumn}
+                    onValueChange={(v) => {
+                      if (v) setDebitColumn(v);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select column..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {csvHeaders.map((h) => (
+                        <SelectItem key={h} value={h}>
+                          {h}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>
+                    Credit Column <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={creditColumn}
+                    onValueChange={(v) => {
+                      if (v) setCreditColumn(v);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select column..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {csvHeaders.map((h) => (
+                        <SelectItem key={h} value={h}>
+                          {h}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Source Column (optional)</Label>
+                  <Select
+                    value={sourceColumn || '_none'}
+                    onValueChange={(v) => setSourceColumn(v === '_none' ? '' : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">None</SelectItem>
+                      {csvHeaders.map((h) => (
+                        <SelectItem key={h} value={h}>
+                          {h}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Source tag */}
+              {sourceTags.length > 0 && (
                 <div>
                   <Label>Source Tag</Label>
-                  <Select value={selectedSourceTagId} onValueChange={(v) => { if (v !== null) setSelectedSourceTagId(v); }}>
-                    <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                  <Select
+                    value={sourceTagId || '_none'}
+                    onValueChange={(v) => setSourceTagId(v === '_none' ? '' : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="_none">None</SelectItem>
                       {sourceTags.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                        <SelectItem key={t.id} value={t.id}>
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              className="inline-block h-2.5 w-2.5 rounded-full"
+                              style={{ backgroundColor: t.color }}
+                            />
+                            {t.name}
+                          </span>
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    All imported transactions will be tagged with this source tag
+                    All imported transactions will be tagged with this source tag.
                   </p>
                 </div>
+              )}
 
-                {newMappingName && dateColumn && nameColumn && debitColumn && creditColumn && (
-                  <Button variant="outline" size="sm" onClick={handleSaveMapping}>
-                    Save Mapping for Reuse
-                  </Button>
-                )}
+              {/* Save mapping */}
+              {mappingName && mappingIsReady && !selectedMappingId && (
+                <Button variant="outline" size="sm" onClick={handleSaveMapping}>
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Save Mapping for Reuse
+                </Button>
+              )}
 
-                {mappings.length > 0 && (
-                  <Button variant="link" className="p-0 text-xs" onClick={() => { setShowNewMapping(false); }}>
-                    Use saved mapping instead
-                  </Button>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              {previewError && (
+                <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {previewError}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setStep('upload')}>
+              Back
+            </Button>
+            <Button
+              className="flex-1"
+              disabled={!mappingIsReady || previewLoading}
+              onClick={handleLoadPreview}
+            >
+              {previewLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading Preview…
+                </>
+              ) : (
+                <>
+                  <Eye className="mr-2 h-4 w-4" />
+                  Preview Import
+                </>
+              )}
+            </Button>
+          </div>
+        </>
       )}
 
-      {/* Import Button */}
-      {file && getActiveMapping() && (
-        <Button onClick={handleImport} disabled={importing} size="lg" className="w-full">
-          {importing ? 'Importing...' : 'Import Transactions'}
-        </Button>
+      {/* ─── STEP 3: Preview ─── */}
+      {step === 'preview' && preview && (
+        <>
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {(
+              [
+                { label: 'Total Rows', value: preview.total, color: '' },
+                { label: 'New', value: preview.newCount, color: 'text-green-600' },
+                { label: 'Duplicates', value: preview.duplicates, color: 'text-yellow-600' },
+                { label: 'Errors', value: preview.errors, color: 'text-red-600' },
+              ] as const
+            ).map(({ label, value, color }) => (
+              <Card key={label}>
+                <CardContent className="p-4 text-center">
+                  <p className={`text-3xl font-bold ${color}`}>{value}</p>
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Preview table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Transaction Preview</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue="all">
+                <TabsList className="mb-4 h-auto flex-wrap gap-1">
+                  <TabsTrigger value="all">All ({preview.total})</TabsTrigger>
+                  <TabsTrigger value="new">New ({preview.newCount})</TabsTrigger>
+                  <TabsTrigger value="duplicates">
+                    Duplicates ({preview.duplicates})
+                  </TabsTrigger>
+                  {preview.errors > 0 && (
+                    <TabsTrigger value="errors">Errors ({preview.errors})</TabsTrigger>
+                  )}
+                </TabsList>
+
+                {(['all', 'new', 'duplicates', 'errors'] as const).map((tab) => {
+                  const rows = preview.rows.filter((r) => {
+                    if (tab === 'all') return true;
+                    if (tab === 'new') return !r.error && !r.isDuplicate;
+                    if (tab === 'duplicates') return !r.error && r.isDuplicate;
+                    if (tab === 'errors') return !!r.error;
+                    return false;
+                  });
+
+                  return (
+                    <TabsContent key={tab} value={tab}>
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-24">Status</TableHead>
+                              <TableHead className="w-28">Date</TableHead>
+                              <TableHead>Description</TableHead>
+                              <TableHead className="w-28 text-right">Debit</TableHead>
+                              <TableHead className="w-28 text-right">Credit</TableHead>
+                              {hasSourceColumn && <TableHead>Source</TableHead>}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {rows.length === 0 ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={hasSourceColumn ? 6 : 5}
+                                  className="py-10 text-center text-muted-foreground"
+                                >
+                                  No rows in this category
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              rows.map((row, i) => (
+                                <TableRow
+                                  key={i}
+                                  className={
+                                    row.error
+                                      ? 'bg-red-50 dark:bg-red-950/20'
+                                      : row.isDuplicate
+                                        ? 'bg-yellow-50 dark:bg-yellow-950/20'
+                                        : ''
+                                  }
+                                >
+                                  <TableCell>
+                                    <RowStatusBadge row={row} />
+                                  </TableCell>
+                                  <TableCell className="text-xs tabular-nums">
+                                    {row.date || '—'}
+                                  </TableCell>
+                                  <TableCell className="max-w-xs">
+                                    <span
+                                      className={`block truncate text-sm ${row.error ? 'italic text-destructive' : ''}`}
+                                      title={row.error || row.name}
+                                    >
+                                      {row.error ? row.error : row.name}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right text-sm tabular-nums">
+                                    {row.debit > 0 ? `$${row.debit.toFixed(2)}` : '—'}
+                                  </TableCell>
+                                  <TableCell className="text-right text-sm tabular-nums">
+                                    {row.credit > 0 ? `$${row.credit.toFixed(2)}` : '—'}
+                                  </TableCell>
+                                  {hasSourceColumn && (
+                                    <TableCell className="max-w-32 truncate text-xs text-muted-foreground">
+                                      {row.source}
+                                    </TableCell>
+                                  )}
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </TabsContent>
+                  );
+                })}
+              </Tabs>
+            </CardContent>
+          </Card>
+
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setStep('configure')}>
+              Back
+            </Button>
+            <Button
+              className="flex-1"
+              disabled={importing || preview.newCount === 0}
+              onClick={handleImport}
+            >
+              {importing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Importing…
+                </>
+              ) : (
+                <>
+                  <Check className="mr-2 h-4 w-4" />
+                  Import {preview.newCount} New Transaction
+                  {preview.newCount !== 1 ? 's' : ''}
+                </>
+              )}
+            </Button>
+          </div>
+
+          {preview.newCount === 0 && (
+            <p className="text-center text-sm text-muted-foreground">
+              No new transactions to import — all rows are duplicates or have errors.
+            </p>
+          )}
+        </>
       )}
 
-      {/* Results */}
-      {result && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold">{result.total}</p>
-                <p className="text-xs text-muted-foreground">Total Rows</p>
+      {/* ─── STEP 4: Done ─── */}
+      {step === 'done' && result && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Check className="h-5 w-5 text-green-600" />
+                Import Complete
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                {(
+                  [
+                    { label: 'Total Rows', value: result.total, color: '' },
+                    { label: 'Imported', value: result.imported, color: 'text-green-600' },
+                    {
+                      label: 'Duplicates Skipped',
+                      value: result.duplicates,
+                      color: 'text-yellow-600',
+                    },
+                    {
+                      label: 'Errors',
+                      value: result.errors,
+                      color: result.errors > 0 ? 'text-red-600' : 'text-muted-foreground',
+                    },
+                  ] as const
+                ).map(({ label, value, color }) => (
+                  <div key={label} className="text-center">
+                    <p className={`text-3xl font-bold ${color}`}>{value}</p>
+                    <p className="text-sm text-muted-foreground">{label}</p>
+                  </div>
+                ))}
               </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-green-600">
-                  <Check className="mr-1 inline h-5 w-5" />
-                  {result.imported}
-                </p>
-                <p className="text-xs text-muted-foreground">Imported</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-yellow-600">{result.duplicates}</p>
-                <p className="text-xs text-muted-foreground">Duplicates Skipped</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-red-600">
-                  {result.errors > 0 && <AlertCircle className="mr-1 inline h-5 w-5" />}
-                  {result.errors}
-                </p>
-                <p className="text-xs text-muted-foreground">Errors</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+
+              {result.errors > 0 && (
+                <div className="flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {result.errors} row{result.errors !== 1 ? 's' : ''} could not be imported due
+                  to parse errors.
+                </div>
+              )}
+
+              {result.imported > 0 && (
+                <div className="flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/20 dark:text-green-400">
+                  <Check className="h-4 w-4 shrink-0" />
+                  Successfully imported {result.imported} transaction
+                  {result.imported !== 1 ? 's' : ''}. You can view them in the Transactions tab.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Button onClick={handleReset} variant="outline" className="w-full">
+            Import Another File
+          </Button>
+        </>
       )}
     </div>
   );

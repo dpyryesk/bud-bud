@@ -75,7 +75,18 @@ export type ParsedTransaction = {
   source: string;
   csvHash: string;
   normalizedName: string;
-  isDuplicate?: boolean;
+  isDuplicate: boolean;
+  isDuplicateInDb: boolean;
+  isDuplicateInCsv: boolean;
+  error?: string;
+};
+
+export type ImportPreview = {
+  total: number;
+  newCount: number;
+  duplicates: number;
+  errors: number;
+  rows: ParsedTransaction[];
 };
 
 export type ImportResult = {
