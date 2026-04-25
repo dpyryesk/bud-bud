@@ -21,10 +21,9 @@ export async function POST(request: NextRequest) {
     const csvText = await file.text();
 
     // Parse CSV
-    const parseResult = Papa.parse(csvText, {
-      header: true,
+    const parseResult = Papa.parse<string[]>(csvText, {
+      header: false,
       skipEmptyLines: true,
-      transformHeader: (h: string) => h.trim(),
     });
 
     if (parseResult.errors.length > 0 && parseResult.data.length === 0) {
@@ -34,17 +33,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const getColumnValue = (row: string[], column: string | null | undefined) => {
+      if (!column || column === 'none') return '';
+      const columnNumber = Number(column);
+      if (!Number.isInteger(columnNumber) || columnNumber < 1) return '';
+      return (row[columnNumber - 1] || '').trim();
+    };
+
     let imported = 0;
     let duplicates = 0;
     let errors = 0;
 
-    for (const row of parseResult.data as Record<string, string>[]) {
+    for (const row of parseResult.data) {
       try {
-        const rawName = (row[mapping.nameColumn] || '').trim();
-        const rawDate = (row[mapping.dateColumn] || '').trim();
-        const rawDebit = (row[mapping.debitColumn] || '0').trim().replace(/[,$]/g, '');
-        const rawCredit = (row[mapping.creditColumn] || '0').trim().replace(/[,$]/g, '');
-        const rawSource = mapping.sourceColumn ? (row[mapping.sourceColumn] || '').trim() : '';
+        const rawName = getColumnValue(row, mapping.nameColumn);
+        const rawDate = getColumnValue(row, mapping.dateColumn);
+        const rawDebit = getColumnValue(row, mapping.debitColumn).replace(/[,$]/g, '');
+        const rawCredit = getColumnValue(row, mapping.creditColumn).replace(/[,$]/g, '');
+        const rawSource = getColumnValue(row, mapping.sourceColumn);
 
         if (!rawName || !rawDate) {
           errors++;
@@ -123,7 +129,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      total: (parseResult.data as Record<string, string>[]).length,
+      total: parseResult.data.length,
       imported,
       duplicates,
       errors,

@@ -20,10 +20,9 @@ export async function POST(request: NextRequest) {
     const mapping = JSON.parse(mappingJson);
     const csvText = await file.text();
 
-    const parseResult = Papa.parse(csvText, {
-      header: true,
+    const parseResult = Papa.parse<string[]>(csvText, {
+      header: false,
       skipEmptyLines: true,
-      transformHeader: (h: string) => h.trim(),
     });
 
     if (parseResult.errors.length > 0 && parseResult.data.length === 0) {
@@ -33,16 +32,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const getColumnValue = (row: string[], column: string | null | undefined) => {
+      if (!column || column === 'none') return '';
+      const columnNumber = Number(column);
+      if (!Number.isInteger(columnNumber) || columnNumber < 1) return '';
+      return (row[columnNumber - 1] || '').trim();
+    };
+
     const rows: ParsedTransaction[] = [];
 
-    for (const row of parseResult.data as Record<string, string>[]) {
-      const rawName = (row[mapping.nameColumn] || '').trim();
-      const rawDate = (row[mapping.dateColumn] || '').trim();
-      const rawDebit = (row[mapping.debitColumn] || '0').trim().replace(/[,$]/g, '');
-      const rawCredit = (row[mapping.creditColumn] || '0').trim().replace(/[,$]/g, '');
-      const sourceCol =
-        mapping.sourceColumn && mapping.sourceColumn !== 'none' ? mapping.sourceColumn : '';
-      const rawSource = sourceCol ? (row[sourceCol] || '').trim() : '';
+    for (const row of parseResult.data) {
+      const rawName = getColumnValue(row, mapping.nameColumn);
+      const rawDate = getColumnValue(row, mapping.dateColumn);
+      const rawDebit = getColumnValue(row, mapping.debitColumn).replace(/[,$]/g, '');
+      const rawCredit = getColumnValue(row, mapping.creditColumn).replace(/[,$]/g, '');
+      const rawSource = getColumnValue(row, mapping.sourceColumn);
 
       if (!rawName || !rawDate) {
         rows.push({

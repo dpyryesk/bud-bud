@@ -33,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import Papa from 'papaparse';
 import type { ImportPreview, ImportResult, ParsedTransaction } from '@/types';
 
 // ---- Local types ----
@@ -172,6 +173,8 @@ export default function ImportPage() {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
 
+  const renderColumnLabel = useCallback((column: string) => `Column ${column}`, []);
+
   // ---- Data fetching ----
 
   const fetchMappings = useCallback(async () => {
@@ -226,14 +229,20 @@ export default function ImportPage() {
     setResult(null);
 
     const text = await f.text();
-    const lines = text.split('\n').filter((l) => l.trim());
-    if (lines.length > 0) {
-      const headers = lines[0].split(',').map((h) => h.trim().replace(/^"(.*)"$/, '$1'));
-      setCsvHeaders(headers);
-      const rawPreview = lines.slice(1, 6).map((line) =>
-        line.split(',').map((c) => c.trim().replace(/^"(.*)"$/, '$1')),
-      );
-      setCsvRawPreview(rawPreview);
+    const parseResult = Papa.parse<string[]>(text, {
+      header: false,
+      skipEmptyLines: true,
+    });
+
+    const parsedRows = parseResult.data
+      .filter((row) => row.some((cell) => String(cell).trim() !== ''))
+      .map((row) => row.map((cell) => String(cell).trim()));
+
+    if (parsedRows.length > 0) {
+      const maxColumnCount = parsedRows.reduce((max, row) => Math.max(max, row.length), 0);
+      const columns = Array.from({ length: maxColumnCount }, (_, i) => String(i + 1));
+      setCsvHeaders(columns);
+      setCsvRawPreview(parsedRows.slice(0, 5));
     }
   };
 
@@ -431,9 +440,9 @@ export default function ImportPage() {
                     <table className="w-full text-xs">
                       <thead className="bg-muted">
                         <tr>
-                          {csvHeaders.map((h, i) => (
+                          {csvHeaders.map((column, i) => (
                             <th key={i} className="whitespace-nowrap px-3 py-2 text-left font-medium">
-                              {h}
+                              {renderColumnLabel(column)}
                             </th>
                           ))}
                         </tr>
@@ -441,9 +450,9 @@ export default function ImportPage() {
                       <tbody>
                         {csvRawPreview.map((row, i) => (
                           <tr key={i} className="border-t">
-                            {row.map((cell, j) => (
+                            {csvHeaders.map((column, j) => (
                               <td key={j} className="max-w-48 truncate px-3 py-1.5">
-                                {cell}
+                                {row[Number(column) - 1] || ''}
                               </td>
                             ))}
                           </tr>
@@ -491,7 +500,8 @@ export default function ImportPage() {
                         <div className="min-w-0">
                           <span className="text-sm font-medium">{m.name}</span>
                           <span className="ml-2 truncate text-xs text-muted-foreground">
-                            {m.dateColumn} · {m.nameColumn} · {m.debitColumn}/{m.creditColumn}
+                            {renderColumnLabel(m.dateColumn)} · {renderColumnLabel(m.nameColumn)} ·{' '}
+                            {renderColumnLabel(m.debitColumn)}/{renderColumnLabel(m.creditColumn)}
                           </span>
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
@@ -526,6 +536,38 @@ export default function ImportPage() {
               )}
 
               {/* Mapping form */}
+              {csvHeaders.length > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-medium text-muted-foreground">
+                    File preview — {csvHeaders.length} columns detected
+                  </p>
+                  <div className="overflow-x-auto rounded border">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted">
+                        <tr>
+                          {csvHeaders.map((column, i) => (
+                            <th key={i} className="whitespace-nowrap px-3 py-2 text-left font-medium">
+                              {renderColumnLabel(column)}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {csvRawPreview.map((row, i) => (
+                          <tr key={i} className="border-t">
+                            {csvHeaders.map((column, j) => (
+                              <td key={j} className="max-w-48 truncate px-3 py-1.5">
+                                {row[Number(column) - 1] || ''}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
                   <Label>Mapping Name</Label>
@@ -550,9 +592,9 @@ export default function ImportPage() {
                       <SelectValue placeholder="Select column..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {csvHeaders.map((h) => (
-                        <SelectItem key={h} value={h}>
-                          {h}
+                      {csvHeaders.map((column) => (
+                        <SelectItem key={column} value={column}>
+                          {renderColumnLabel(column)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -594,9 +636,9 @@ export default function ImportPage() {
                       <SelectValue placeholder="Select column..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {csvHeaders.map((h) => (
-                        <SelectItem key={h} value={h}>
-                          {h}
+                      {csvHeaders.map((column) => (
+                        <SelectItem key={column} value={column}>
+                          {renderColumnLabel(column)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -617,9 +659,9 @@ export default function ImportPage() {
                       <SelectValue placeholder="Select column..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {csvHeaders.map((h) => (
-                        <SelectItem key={h} value={h}>
-                          {h}
+                      {csvHeaders.map((column) => (
+                        <SelectItem key={column} value={column}>
+                          {renderColumnLabel(column)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -640,9 +682,9 @@ export default function ImportPage() {
                       <SelectValue placeholder="Select column..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {csvHeaders.map((h) => (
-                        <SelectItem key={h} value={h}>
-                          {h}
+                      {csvHeaders.map((column) => (
+                        <SelectItem key={column} value={column}>
+                          {renderColumnLabel(column)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -660,9 +702,9 @@ export default function ImportPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="_none">None</SelectItem>
-                      {csvHeaders.map((h) => (
-                        <SelectItem key={h} value={h}>
-                          {h}
+                      {csvHeaders.map((column) => (
+                        <SelectItem key={column} value={column}>
+                          {renderColumnLabel(column)}
                         </SelectItem>
                       ))}
                     </SelectContent>
