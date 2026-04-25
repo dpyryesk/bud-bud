@@ -236,8 +236,10 @@ function AutoTagRulesSection({ categoryTags }: { categoryTags: Tag[] }) {
   }, []);
 
   useEffect(() => {
-    fetchRules();
-  }, [fetchRules]);
+    fetch('/api/auto-tag/rules')
+      .then((res) => res.json())
+      .then((data) => setRules(data));
+  }, []);
 
   const resetForm = useCallback(() => {
     setFormPattern('');
@@ -540,8 +542,9 @@ export default function TagsPage() {
   }, []);
 
   useEffect(() => {
-    fetchTags();
-  }, [fetchTags]);
+    fetch('/api/tags')
+      .then((res) => res.json()).then((data) => setTags(data));
+  }, []);
 
   const resetForm = useCallback(() => {
     setFormName('');

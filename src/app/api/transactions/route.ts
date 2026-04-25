@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-// GET /api/transactions - List transactions with period filter and pagination
+// GET /api/transactions - List transactions with period filter, search, and pagination
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const start = searchParams.get('start');
@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
   const rawLimit = Number.parseInt(searchParams.get('limit') || '50', 10);
   const tagId = searchParams.get('tagId');
   const untaggedOnly = searchParams.get('untaggedOnly') === 'true';
+  const search = searchParams.get('search')?.trim() ?? '';
 
   if (!Number.isInteger(rawPage) || !Number.isInteger(rawLimit)) {
     return NextResponse.json({ error: 'page and limit must be integers' }, { status: 400 });
@@ -25,6 +26,10 @@ export async function GET(request: NextRequest) {
       gte: new Date(start),
       lte: new Date(end),
     };
+  }
+
+  if (search) {
+    where.name = { contains: search };
   }
 
   if (tagId) {
