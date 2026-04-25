@@ -28,11 +28,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col">
+      <body className="flex h-full flex-col">
         <TimePeriodProvider>
           <TooltipProvider>
             <Header />
-            <div className="flex flex-1">
+            <div className="flex min-h-0 flex-1">
               <Sidebar />
               <main className="flex-1 overflow-auto p-4 pb-20 md:p-6 md:pb-6">{children}</main>
             </div>
