@@ -8,7 +8,7 @@
 [x] Build CSV import — mapping config, parser, duplicate detection, source tag assignment, preview
 [x] Build auto-tagging — engine, rule management, exact-match lookup, regex matching
 [x] Build transactions view — table, period filtering, tag assignment, notes, auto-tag button
-[ ] Build budget line management — CRUD API + form UI
-[ ] Build budget view — calculations with scaling, rollup, split, rollover + display
+[x] Build budget line management — CRUD API + form UI
+[x] Build budget view — calculations with scaling, rollup, split, rollover + display
 [ ] Build dashboard + charts with recharts
 [ ] Polish — error handling, loading states, responsive design, edge cases

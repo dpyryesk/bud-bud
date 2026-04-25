@@ -50,6 +50,7 @@ export default function BudgetPage() {
   const [formAmount, setFormAmount] = useState('');
   const [formRollover, setFormRollover] = useState(false);
   const [formTagIds, setFormTagIds] = useState<string[]>([]);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const fetchSummary = useCallback(async () => {
     setLoading(true);
@@ -79,6 +80,7 @@ export default function BudgetPage() {
     setFormRollover(false);
     setFormTagIds([]);
     setEditingId(null);
+    setFormError(null);
   };
 
   const handleEdit = (line: BudgetSummaryLine) => {
@@ -98,8 +100,19 @@ export default function BudgetPage() {
   };
 
   const handleSubmit = async () => {
+    setFormError(null);
+    if (!formName.trim()) {
+      setFormError('Name is required.');
+      return;
+    }
+    const parsedAmount = parseFloat(formAmount);
+    if (!formAmount || isNaN(parsedAmount) || parsedAmount < 0) {
+      setFormError('Amount must be a valid non-negative number.');
+      return;
+    }
+
     const payload = {
-      name: formName,
+      name: formName.trim(),
       period: formPeriod,
       amount: formAmount,
       rollover: formRollover,
@@ -156,9 +169,18 @@ export default function BudgetPage() {
                 <DialogTitle>{editingId ? 'Edit Budget Line' : 'Create Budget Line'}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
+                {formError && (
+                  <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {formError}
+                  </p>
+                )}
                 <div>
                   <Label>Name</Label>
-                  <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="e.g., Groceries" />
+                  <Input
+                    value={formName}
+                    onChange={(e) => { setFormName(e.target.value); setFormError(null); }}
+                    placeholder="e.g., Groceries"
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -174,7 +196,14 @@ export default function BudgetPage() {
                   </div>
                   <div>
                     <Label>Amount</Label>
-                    <Input type="number" step="0.01" value={formAmount} onChange={(e) => setFormAmount(e.target.value)} placeholder="500.00" />
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formAmount}
+                      onChange={(e) => { setFormAmount(e.target.value); setFormError(null); }}
+                      placeholder="500.00"
+                    />
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -204,7 +233,7 @@ export default function BudgetPage() {
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }}>Cancel</Button>
-                  <Button onClick={handleSubmit} disabled={!formName || !formAmount}>
+                  <Button onClick={handleSubmit}>
                     {editingId ? 'Update' : 'Create'}
                   </Button>
                 </div>
@@ -259,7 +288,17 @@ export default function BudgetPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {summaryLines.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <TableRow key={i}>
+                  {Array.from({ length: 7 }).map((__, j) => (
+                    <TableCell key={j}>
+                      <div className="bg-muted h-4 animate-pulse rounded" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : summaryLines.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-muted-foreground text-center">
                   No budget lines yet. Create one to start tracking.
@@ -304,7 +343,7 @@ export default function BudgetPage() {
                   </TableCell>
                 </TableRow>
               ))
-            )}
+            ) }
           </TableBody>
         </Table>
       </div>

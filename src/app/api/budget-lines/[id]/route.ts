@@ -1,6 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// GET /api/budget-lines/:id - Fetch a single budget line
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  const budgetLine = await prisma.budgetLine.findUnique({
+    where: { id },
+    include: {
+      tags: {
+        include: {
+          tag: { select: { id: true, name: true, color: true, isSource: true } },
+        },
+      },
+    },
+  });
+
+  if (!budgetLine) {
+    return NextResponse.json({ error: 'Budget line not found' }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    ...budgetLine,
+    tags: budgetLine.tags.map((blt) => blt.tag),
+  });
+}
+
 // PUT /api/budget-lines/:id - Update a budget line
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
