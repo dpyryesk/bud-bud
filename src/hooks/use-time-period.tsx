@@ -5,6 +5,8 @@ import { type TimePeriod, getDefaultPeriod, type PeriodType } from '@/lib/date-u
 import {
   startOfMonth,
   endOfMonth,
+  setMonth,
+  setYear,
   startOfYear,
   endOfYear,
   subMonths,
@@ -17,6 +19,7 @@ type TimePeriodContextType = {
   setPeriod: (period: TimePeriod) => void;
   setPreset: (preset: string) => void;
   setCustomRange: (start: Date, end: Date) => void;
+  setMonthYear: (month: number, year: number) => void;
 };
 
 const TimePeriodContext = createContext<TimePeriodContextType | null>(null);
@@ -81,8 +84,21 @@ export function TimePeriodProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const setMonthYear = useCallback((month: number, year: number) => {
+    const now = new Date();
+    const withMonth = setMonth(now, month);
+    const withYear = setYear(withMonth, year);
+
+    setPeriod({
+      start: startOfMonth(withYear),
+      end: endOfMonth(withYear),
+      label: format(withYear, 'MMMM yyyy'),
+      type: 'month' as PeriodType,
+    });
+  }, []);
+
   return (
-    <TimePeriodContext.Provider value={{ period, setPeriod, setPreset, setCustomRange }}>
+    <TimePeriodContext.Provider value={{ period, setPeriod, setPreset, setCustomRange, setMonthYear }}>
       {children}
     </TimePeriodContext.Provider>
   );

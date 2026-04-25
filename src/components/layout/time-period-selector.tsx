@@ -11,93 +11,129 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
-const PRESETS = [
-  { key: 'current-month', label: 'Current Month' },
-  { key: 'last-month', label: 'Last Month' },
-  { key: 'current-year', label: 'Current Year' },
-  { key: 'last-year', label: 'Last Year' },
+const MONTHS = [
+  { value: '0', label: 'January' },
+  { value: '1', label: 'February' },
+  { value: '2', label: 'March' },
+  { value: '3', label: 'April' },
+  { value: '4', label: 'May' },
+  { value: '5', label: 'June' },
+  { value: '6', label: 'July' },
+  { value: '7', label: 'August' },
+  { value: '8', label: 'September' },
+  { value: '9', label: 'October' },
+  { value: '10', label: 'November' },
+  { value: '11', label: 'December' },
 ] as const;
 
-export function TimePeriodSelector() {
-  const { period, setPreset, setCustomRange } = useTimePeriod();
-  const [open, setOpen] = useState(false);
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
+function buildYearOptions(selectedYear: number) {
+  const currentYear = new Date().getFullYear();
+  const minYear = Math.min(currentYear - 5, selectedYear);
+  const maxYear = Math.max(currentYear + 1, selectedYear);
 
-  const handlePreset = (key: string) => {
-    setPreset(key);
+  const years: number[] = [];
+  for (let year = maxYear; year >= minYear; year -= 1) {
+    years.push(year);
+  }
+  return years;
+}
+
+function getMonthLabel(monthValue: string) {
+  return MONTHS.find((month) => month.value === monthValue)?.label ?? monthValue;
+}
+
+export function TimePeriodSelector() {
+  const { period, setMonthYear, setPreset } = useTimePeriod();
+  const [open, setOpen] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(String(period.start.getMonth()));
+  const [selectedYear, setSelectedYear] = useState(String(period.start.getFullYear()));
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      setSelectedMonth(String(period.start.getMonth()));
+      setSelectedYear(String(period.start.getFullYear()));
+    }
+    setOpen(nextOpen);
+  };
+
+  const handleApply = () => {
+    const month = Number(selectedMonth);
+    const year = Number(selectedYear);
+    setMonthYear(month, year);
     setOpen(false);
   };
 
-  const handleCustomApply = () => {
-    if (customStart && customEnd) {
-      setCustomRange(new Date(customStart), new Date(customEnd));
-      setOpen(false);
-    }
+  const handleCurrentMonth = () => {
+    setPreset('current-month');
+    setOpen(false);
   };
 
+  const handleCurrentYear = () => {
+    setPreset('current-year');
+    setOpen(false);
+  };
+
+  const yearOptions = buildYearOptions(Number(selectedYear));
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
         className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}
       >
         <CalendarDays className="h-4 w-4" />
-        <span className="hidden sm:inline">{period.label}</span>
-        <span className="sm:hidden">
-          {format(period.start, 'MMM d')} - {format(period.end, 'MMM d')}
-        </span>
+        <span>{period.label}</span>
       </PopoverTrigger>
       <PopoverContent className="w-72" align="end">
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Select Period</p>
-          <div className="grid gap-1">
-            {PRESETS.map((preset) => (
-              <Button
-                key={preset.key}
-                variant="ghost"
-                className="justify-start"
-                onClick={() => handlePreset(preset.key)}
-              >
-                {preset.label}
-              </Button>
-            ))}
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" size="sm" onClick={handleCurrentMonth}>
+              Current Month
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleCurrentYear}>
+              Current Year
+            </Button>
           </div>
-          <Separator />
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Custom Range</p>
-            <div className="grid gap-2">
-              <div>
-                <Label htmlFor="custom-start" className="text-xs">
-                  Start Date
-                </Label>
-                <Input
-                  id="custom-start"
-                  type="date"
-                  value={customStart}
-                  onChange={(e) => setCustomStart(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="custom-end" className="text-xs">
-                  End Date
-                </Label>
-                <Input
-                  id="custom-end"
-                  type="date"
-                  value={customEnd}
-                  onChange={(e) => setCustomEnd(e.target.value)}
-                />
-              </div>
-              <Button onClick={handleCustomApply} disabled={!customStart || !customEnd} size="sm">
-                Apply
-              </Button>
-            </div>
+
+          <p className="text-sm font-medium">Select Month and Year</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Select value={selectedMonth} onValueChange={(v) => { if (v !== null) setSelectedMonth(v); }}>
+              <SelectTrigger className="w-full">
+                <SelectValue>{getMonthLabel(selectedMonth)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {MONTHS.map((month) => (
+                  <SelectItem key={month.value} value={month.value}>
+                    {month.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedYear} onValueChange={(v) => { if (v !== null) setSelectedYear(v); }}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {yearOptions.map((year) => (
+                  <SelectItem key={year} value={String(year)}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+          <Button onClick={handleApply} size="sm" className="w-full">
+            Apply
+          </Button>
         </div>
       </PopoverContent>
     </Popover>

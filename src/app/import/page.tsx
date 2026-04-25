@@ -378,6 +378,7 @@ export default function ImportPage() {
 
   const mappingIsReady = !!(dateColumn && nameColumn && debitColumn && creditColumn);
   const hasSourceColumn = preview?.rows.some((r) => r.source);
+  const selectedSourceTag = sourceTags.find((t) => t.id === sourceTagId);
 
   // ---- Render ----
 
@@ -721,7 +722,9 @@ export default function ImportPage() {
                     onValueChange={(v) => setSourceTagId(v === '_none' ? '' : v)}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="None" />
+                      <SelectValue placeholder="None">
+                        {selectedSourceTag ? selectedSourceTag.name : 'None'}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="_none">None</SelectItem>
