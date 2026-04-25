@@ -11,7 +11,7 @@ tag hierarchies, source tracking, and budget tracking with rollover support.
 ## Tech Stack
 
 | Layer           | Technology                               |
-|-----------------|------------------------------------------|
+| --------------- | ---------------------------------------- |
 | Framework       | Next.js 15+ with App Router              |
 | Language        | TypeScript (strict)                      |
 | Database        | SQLite via Prisma ORM                    |
@@ -153,24 +153,24 @@ model Transaction {
 
 model Tag {
   id           String           @id @default(cuid())
-  name         String           
+  name         String
   color        String           @default("#6B7280")
   isSource     Boolean          @default(false)
-  parentId     String?          
+  parentId     String?
   parent       Tag?             @relation("TagHierarchy", fields: [parentId], references: [id])
   children     Tag[]            @relation("TagHierarchy")
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
-  transactions TransactionTag[] 
-  budgetLines  BudgetLineTag[]  
-  autoTagRules AutoTagRule[]    
-  csvMappings  CsvMapping[]     
+  transactions TransactionTag[]
+  budgetLines  BudgetLineTag[]
+  autoTagRules AutoTagRule[]
+  csvMappings  CsvMapping[]
 }
 
 model TransactionTag {
   id            String      @id @default(cuid())
-  transactionId String      
-  tagId         String      
+  transactionId String
+  tagId         String
   transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   tag           Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
@@ -179,19 +179,19 @@ model TransactionTag {
 
 model BudgetLine {
   id        String          @id @default(cuid())
-  name      String          
+  name      String
   period    String          // "monthly" | "biweekly" | "yearly"
-  amount    Float           
+  amount    Float
   rollover  Boolean         @default(false)
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
-  tags      BudgetLineTag[] 
+  tags      BudgetLineTag[]
 }
 
 model BudgetLineTag {
   id           String     @id @default(cuid())
-  budgetLineId String     
-  tagId        String     
+  budgetLineId String
+  tagId        String
   budgetLine   BudgetLine @relation(fields: [budgetLineId], references: [id], onDelete: Cascade)
   tag          Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
@@ -201,22 +201,22 @@ model BudgetLineTag {
 model CsvMapping {
   id           String   @id @default(cuid())
   name         String   @unique
-  dateColumn   String   
-  nameColumn   String   
-  debitColumn  String   
-  creditColumn String   
+  dateColumn   String
+  nameColumn   String
+  debitColumn  String
+  creditColumn String
   sourceColumn String   @default("")
   dateFormat   String   @default("YYYY-MM-DD")
-  sourceTagId  String?  
+  sourceTagId  String?
   sourceTag    Tag?     @relation(fields: [sourceTagId], references: [id])
   createdAt    DateTime @default(now())
 }
 
 model AutoTagRule {
   id        String   @id @default(cuid())
-  pattern   String   
+  pattern   String
   matchType String   // "exact" | "regex"
-  tagId     String   
+  tagId     String
   tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 }
@@ -360,6 +360,7 @@ flowchart TD
 3. **Unmatched**: Transaction remains untagged for manual review.
 
 **Name normalization rules** (applied during import via `normalize.ts`):
+
 1. Convert to lowercase
 2. Remove sequences of 6+ digits (reference numbers, transaction IDs)
 3. Remove common bank prefixes/suffixes (configurable)
@@ -367,6 +368,7 @@ flowchart TD
 5. Trim whitespace
 
 Examples:
+
 - `Internet Banking E-TRANSFER 105720422508 Microgreens` → `internet banking e-transfer microgreens`
 - `Electronic Funds Transfer DEPOSIT CANADA LIFE` → `electronic funds transfer deposit canada life`
 - `VISA DEBIT PUR 1234567890 UBER EATS` → `visa debit pur uber eats`
@@ -406,7 +408,7 @@ flowchart TD
 ### 3. Budget Period Scaling
 
 | Budget Period | Viewing Monthly      | Viewing Yearly     | Viewing Custom          |
-|---------------|----------------------|--------------------|-------------------------|
+| ------------- | -------------------- | ------------------ | ----------------------- |
 | Monthly $500  | $500                 | $6,000             | $500 × months in range  |
 | Biweekly $200 | $200 × 2.1667 ≈ $433 | $200 × 26 = $5,200 | $200 × biweeks in range |
 | Yearly $3,000 | $3,000 / 12 = $250   | $3,000             | $3,000 × years fraction |
@@ -451,11 +453,11 @@ flowchart LR
 
 ```typescript
 type TimePeriod = {
-    start: Date
-    end: Date
-    label: string
-    type: 'month' | 'year' | 'custom'
-}
+  start: Date;
+  end: Date;
+  label: string;
+  type: 'month' | 'year' | 'custom';
+};
 ```
 
 ---
@@ -463,7 +465,7 @@ type TimePeriod = {
 ## API Routes Summary
 
 | Method | Route                        | Description                                      |
-|--------|------------------------------|--------------------------------------------------|
+| ------ | ---------------------------- | ------------------------------------------------ |
 | GET    | `/api/transactions`          | List transactions with period filter, pagination |
 | PATCH  | `/api/transactions/:id`      | Update transaction notes                         |
 | POST   | `/api/transactions/:id/tags` | Add/remove tags from a transaction               |

@@ -114,7 +114,13 @@ export async function POST(request: NextRequest) {
       }
 
       const dateStr = date.toISOString().split('T')[0];
-      const csvHash = await hashTransaction({ date: dateStr, name: rawName, debit, credit, source: rawSource });
+      const csvHash = await hashTransaction({
+        date: dateStr,
+        name: rawName,
+        debit,
+        credit,
+        source: rawSource,
+      });
       const normalizedName = normalizeTransactionName(rawName);
 
       rows.push({

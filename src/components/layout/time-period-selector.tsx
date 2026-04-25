@@ -2,15 +2,10 @@
 
 import { useState } from 'react';
 import { CalendarDays } from 'lucide-react';
-import { format } from 'date-fns';
 import { useTimePeriod } from '@/hooks/use-time-period';
 import { buttonVariants } from '@/components/ui/button';
 import { Button } from '@/components/ui/button';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -86,9 +81,7 @@ export function TimePeriodSelector() {
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger
-        className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}
-      >
+      <PopoverTrigger className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}>
         <CalendarDays className="h-4 w-4" />
         <span>{period.label}</span>
       </PopoverTrigger>
@@ -105,7 +98,12 @@ export function TimePeriodSelector() {
 
           <p className="text-sm font-medium">Select Month and Year</p>
           <div className="grid grid-cols-2 gap-2">
-            <Select value={selectedMonth} onValueChange={(v) => { if (v !== null) setSelectedMonth(v); }}>
+            <Select
+              value={selectedMonth}
+              onValueChange={(v) => {
+                if (v !== null) setSelectedMonth(v);
+              }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue>{getMonthLabel(selectedMonth)}</SelectValue>
               </SelectTrigger>
@@ -118,7 +116,12 @@ export function TimePeriodSelector() {
               </SelectContent>
             </Select>
 
-            <Select value={selectedYear} onValueChange={(v) => { if (v !== null) setSelectedYear(v); }}>
+            <Select
+              value={selectedYear}
+              onValueChange={(v) => {
+                if (v !== null) setSelectedYear(v);
+              }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>

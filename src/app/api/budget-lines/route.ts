@@ -34,10 +34,7 @@ export async function POST(request: NextRequest) {
   const { name, period, amount, rollover, tagIds } = body;
 
   if (!name || !period || amount === undefined) {
-    return NextResponse.json(
-      { error: 'name, period, and amount are required' },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: 'name, period, and amount are required' }, { status: 400 });
   }
 
   const budgetLine = await prisma.budgetLine.create({

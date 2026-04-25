@@ -70,8 +70,18 @@ export default function BudgetPage() {
     setTags(data.filter((t: TagOption) => !t.isSource));
   }, []);
 
-  useEffect(() => { fetchSummary(); }, [fetchSummary]);
-  useEffect(() => { fetchTags(); }, [fetchTags]);
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      void fetchSummary();
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [fetchSummary]);
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      void fetchTags();
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [fetchTags]);
 
   const resetForm = () => {
     setFormName('');
@@ -159,7 +169,13 @@ export default function BudgetPage() {
           <Button variant="outline" size="icon" onClick={fetchSummary} disabled={loading}>
             <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
           </Button>
-          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+          <Dialog
+            open={dialogOpen}
+            onOpenChange={(open) => {
+              setDialogOpen(open);
+              if (!open) resetForm();
+            }}
+          >
             <DialogTrigger render={<Button />}>
               <Plus className="mr-2 h-4 w-4" />
               Add Budget Line
@@ -170,7 +186,7 @@ export default function BudgetPage() {
               </DialogHeader>
               <div className="space-y-4">
                 {formError && (
-                  <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  <p className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
                     {formError}
                   </p>
                 )}
@@ -178,15 +194,25 @@ export default function BudgetPage() {
                   <Label>Name</Label>
                   <Input
                     value={formName}
-                    onChange={(e) => { setFormName(e.target.value); setFormError(null); }}
+                    onChange={(e) => {
+                      setFormName(e.target.value);
+                      setFormError(null);
+                    }}
                     placeholder="e.g., Groceries"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Period</Label>
-                    <Select value={formPeriod} onValueChange={(v) => { if (v !== null) setFormPeriod(v); }}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                    <Select
+                      value={formPeriod}
+                      onValueChange={(v) => {
+                        if (v !== null) setFormPeriod(v);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="monthly">Monthly</SelectItem>
                         <SelectItem value="biweekly">Biweekly</SelectItem>
@@ -201,14 +227,25 @@ export default function BudgetPage() {
                       step="0.01"
                       min="0"
                       value={formAmount}
-                      onChange={(e) => { setFormAmount(e.target.value); setFormError(null); }}
+                      onChange={(e) => {
+                        setFormAmount(e.target.value);
+                        setFormError(null);
+                      }}
                       placeholder="500.00"
                     />
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input type="checkbox" id="rollover" checked={formRollover} onChange={(e) => setFormRollover(e.target.checked)} className="rounded" />
-                  <Label htmlFor="rollover">Enable rollover (carry unspent/overspent to next period)</Label>
+                  <input
+                    type="checkbox"
+                    id="rollover"
+                    checked={formRollover}
+                    onChange={(e) => setFormRollover(e.target.checked)}
+                    className="rounded"
+                  />
+                  <Label htmlFor="rollover">
+                    Enable rollover (carry unspent/overspent to next period)
+                  </Label>
                 </div>
                 <div>
                   <Label>Tags</Label>
@@ -232,10 +269,16 @@ export default function BudgetPage() {
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }}>Cancel</Button>
-                  <Button onClick={handleSubmit}>
-                    {editingId ? 'Update' : 'Create'}
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setDialogOpen(false);
+                      resetForm();
+                    }}
+                  >
+                    Cancel
                   </Button>
+                  <Button onClick={handleSubmit}>{editingId ? 'Update' : 'Create'}</Button>
                 </div>
               </div>
             </DialogContent>
@@ -266,7 +309,12 @@ export default function BudgetPage() {
             <CardTitle className="text-sm font-medium">Remaining</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={cn('text-2xl font-bold', totalRemaining >= 0 ? 'text-green-600' : 'text-red-600')}>
+            <div
+              className={cn(
+                'text-2xl font-bold',
+                totalRemaining >= 0 ? 'text-green-600' : 'text-red-600',
+              )}
+            >
               {formatCurrency(totalRemaining)}
             </div>
           </CardContent>
@@ -284,7 +332,7 @@ export default function BudgetPage() {
               <TableHead className="text-right">Budget</TableHead>
               <TableHead className="text-right">Actual</TableHead>
               <TableHead className="text-right">Remaining</TableHead>
-              <TableHead className="w-[80px]"></TableHead>
+              <TableHead className="w-20"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -310,10 +358,12 @@ export default function BudgetPage() {
                   <TableCell className="font-medium">
                     {line.budgetLine.name}
                     {line.budgetLine.rollover && (
-                      <span className="ml-1 text-xs text-muted-foreground" title="Rollover enabled">🔄</span>
+                      <span className="text-muted-foreground ml-1 text-xs" title="Rollover enabled">
+                        🔄
+                      </span>
                     )}
                     {line.rolloverAmount !== 0 && (
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-muted-foreground text-xs">
                         Rollover: {formatCurrency(line.rolloverAmount)}
                       </div>
                     )}
@@ -326,24 +376,43 @@ export default function BudgetPage() {
                     </div>
                   </TableCell>
                   <TableCell className="capitalize">{line.budgetLine.period}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(line.effectiveBudget)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(line.actualSpending)}</TableCell>
-                  <TableCell className={cn('text-right font-medium', line.remaining >= 0 ? 'text-green-600' : 'text-red-600')}>
+                  <TableCell className="text-right">
+                    {formatCurrency(line.effectiveBudget)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(line.actualSpending)}
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      'text-right font-medium',
+                      line.remaining >= 0 ? 'text-green-600' : 'text-red-600',
+                    )}
+                  >
                     {formatCurrency(line.remaining)}
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(line)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => handleEdit(line)}
+                      >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(line.budgetLine.id)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive h-7 w-7"
+                        onClick={() => handleDelete(line.budgetLine.id)}
+                      >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </TableCell>
                 </TableRow>
               ))
-            ) }
+            )}
           </TableBody>
         </Table>
       </div>

@@ -18,7 +18,16 @@ export async function GET() {
 // POST /api/csv-mappings - Create a new CSV mapping
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { name, dateColumn, nameColumn, debitColumn, creditColumn, sourceColumn, dateFormat, sourceTagId } = body;
+  const {
+    name,
+    dateColumn,
+    nameColumn,
+    debitColumn,
+    creditColumn,
+    sourceColumn,
+    dateFormat,
+    sourceTagId,
+  } = body;
 
   if (!name || !dateColumn || !nameColumn || !debitColumn || !creditColumn) {
     return NextResponse.json(

@@ -5,7 +5,7 @@ import { useTimePeriod } from '@/hooks/use-time-period';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeftRight, DollarSign, TrendingDown, TrendingUp } from 'lucide-react';
 import { formatCurrency } from '@/lib/date-utils';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, ResponsiveContainer, Tooltip, Legend, Sector } from 'recharts';
 import Link from 'next/link';
 
 type DashboardData = {
@@ -30,7 +30,10 @@ export default function DashboardPage() {
   }, [period]);
 
   useEffect(() => {
-    fetchData();
+    const timeoutId = setTimeout(() => {
+      void fetchData();
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [fetchData]);
 
   return (
@@ -96,7 +99,7 @@ export default function DashboardPage() {
             <CardTitle>Spending by Tag</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px]">
+            <div className="h-75">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -106,17 +109,10 @@ export default function DashboardPage() {
                     cx="50%"
                     cy="50%"
                     outerRadius={100}
-                    label={({ name, percent }) =>
-                      `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`
-                    }
-                  >
-                    {data.spendingByTag.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: unknown) => formatCurrency(value as number)}
+                    shape={(props) => <Sector {...props} fill={props.payload.color} />}
+                    label={({ name, percent }) => `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`}
                   />
+                  <Tooltip formatter={(value: unknown) => formatCurrency(value as number)} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>

@@ -1,16 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import {
-  Plus,
-  Pencil,
-  Trash2,
-  ChevronRight,
-  ChevronDown,
-  FolderPlus,
-  X,
-  Zap,
-} from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, FolderPlus, X, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,12 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { TagBadge } from '@/components/tags/tag-badge';
 import { Badge } from '@/components/ui/badge';
@@ -144,7 +130,7 @@ function TagTreeNode({
   return (
     <div>
       <div
-        className="group flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted"
+        className="group hover:bg-muted flex items-center gap-2 rounded-md px-2 py-1.5"
         style={{ paddingLeft: `${level * 20 + 8}px` }}
       >
         {hasChildren ? (
@@ -153,11 +139,7 @@ function TagTreeNode({
             className="text-muted-foreground"
             aria-label={expanded ? 'Collapse' : 'Expand'}
           >
-            {expanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
+            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
         ) : (
           <span className="w-4" />
@@ -193,7 +175,7 @@ function TagTreeNode({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-destructive"
+            className="text-destructive h-7 w-7"
             title="Delete tag"
             onClick={() => onDelete(tag.id)}
           >
@@ -384,9 +366,7 @@ function AutoTagRulesSection({ categoryTags }: { categoryTags: Tag[] }) {
                   id="rule-pattern"
                   value={formPattern}
                   onChange={(e) => handlePatternChange(e.target.value)}
-                  placeholder={
-                    formMatchType === 'exact' ? 'e.g. uber eats' : 'e.g. uber\\s*eats'
-                  }
+                  placeholder={formMatchType === 'exact' ? 'e.g. uber eats' : 'e.g. uber\\s*eats'}
                   onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
                   autoFocus
                   className={regexError ? 'border-destructive' : ''}
@@ -486,7 +466,7 @@ function AutoTagRulesSection({ categoryTags }: { categoryTags: Tag[] }) {
               {/* Match type badge */}
               <Badge
                 variant="outline"
-                className="shrink-0 font-mono text-xs uppercase tracking-wide"
+                className="shrink-0 font-mono text-xs tracking-wide uppercase"
               >
                 {rule.matchType}
               </Badge>
@@ -508,7 +488,7 @@ function AutoTagRulesSection({ categoryTags }: { categoryTags: Tag[] }) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 shrink-0 text-destructive opacity-0 group-hover:opacity-100"
+                className="text-destructive h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100"
                 title="Delete rule"
                 onClick={() => handleDelete(rule.id)}
               >
@@ -543,7 +523,8 @@ export default function TagsPage() {
 
   useEffect(() => {
     fetch('/api/tags')
-      .then((res) => res.json()).then((data) => setTags(data));
+      .then((res) => res.json())
+      .then((data) => setTags(data));
   }, []);
 
   const resetForm = useCallback(() => {
@@ -637,9 +618,7 @@ export default function TagsPage() {
       ? new Set([editingTag.id])
       : new Set();
 
-  const parentOptions = tags.filter(
-    (t) => !excludedIds.has(t.id) && t.isSource === formIsSource,
-  );
+  const parentOptions = tags.filter((t) => !excludedIds.has(t.id) && t.isSource === formIsSource);
 
   // Find the selected parent tag for display
   const selectedParentTag = formParentId ? tags.find((t) => t.id === formParentId) : null;
@@ -869,8 +848,8 @@ export default function TagsPage() {
           </div>
           {sourceTree.length === 0 ? (
             <p className="text-muted-foreground text-sm">
-              No source tags yet. These identify which account or card a transaction came from
-              (e.g. &ldquo;Chequing&rdquo;, &ldquo;Visa&rdquo;). They are excluded from budget
+              No source tags yet. These identify which account or card a transaction came from (e.g.
+              &ldquo;Chequing&rdquo;, &ldquo;Visa&rdquo;). They are excluded from budget
               calculations.
             </p>
           ) : (

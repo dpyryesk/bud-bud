@@ -98,7 +98,9 @@ export function TimePeriodProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <TimePeriodContext.Provider value={{ period, setPeriod, setPreset, setCustomRange, setMonthYear }}>
+    <TimePeriodContext.Provider
+      value={{ period, setPeriod, setPreset, setCustomRange, setMonthYear }}
+    >
       {children}
     </TimePeriodContext.Provider>
   );

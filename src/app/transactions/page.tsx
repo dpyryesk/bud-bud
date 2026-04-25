@@ -15,11 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { TagBadge } from '@/components/tags/tag-badge';
 import { formatCurrency } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
@@ -85,27 +81,35 @@ export default function TransactionsPage() {
   }, []);
 
   useEffect(() => {
-    fetchTransactions();
+    const timeoutId = setTimeout(() => {
+      void fetchTransactions();
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [fetchTransactions]);
 
   useEffect(() => {
-    fetchTags();
+    const timeoutId = setTimeout(() => {
+      void fetchTags();
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [fetchTags]);
 
-  // Reset to page 1 when period, search, or filter changes
-  useEffect(() => {
-    setPage(1);
-  }, [period, untaggedOnly]);
-
   // Update a single transaction's tags in-place (optimistic)
-  const handleTagsUpdated = useCallback((transactionId: string, updatedTags: TransactionWithTags['tags']) => {
-    setTransactions((prev) =>
-      prev.map((tx) => (tx.id === transactionId ? { ...tx, tags: updatedTags } : tx)),
-    );
-  }, []);
+  const handleTagsUpdated = useCallback(
+    (transactionId: string, updatedTags: TransactionWithTags['tags']) => {
+      setTransactions((prev) =>
+        prev.map((tx) => (tx.id === transactionId ? { ...tx, tags: updatedTags } : tx)),
+      );
+    },
+    [],
+  );
 
   const handleSetTags = useCallback(
-    async (transactionId: string, tagIds: string[], previousTags: TransactionWithTags['tags']): Promise<TransactionWithTags['tags']> => {
+    async (
+      transactionId: string,
+      tagIds: string[],
+      previousTags: TransactionWithTags['tags'],
+    ): Promise<TransactionWithTags['tags']> => {
       const res = await fetch(`/api/transactions/${transactionId}/tags`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -132,9 +136,7 @@ export default function TransactionsPage() {
     });
     if (!res.ok) return;
     // Update notes in-place without full refetch
-    setTransactions((prev) =>
-      prev.map((tx) => (tx.id === transactionId ? { ...tx, notes } : tx)),
-    );
+    setTransactions((prev) => prev.map((tx) => (tx.id === transactionId ? { ...tx, notes } : tx)));
   }, []);
 
   const handleAutoTag = async () => {
@@ -160,7 +162,9 @@ export default function TransactionsPage() {
         <div>
           <h1 className="text-2xl font-bold">Transactions</h1>
           <p className="text-muted-foreground text-sm">
-            {loading ? 'Loading…' : `${total} transaction${total !== 1 ? 's' : ''} for ${period.label}`}
+            {loading
+              ? 'Loading…'
+              : `${total} transaction${total !== 1 ? 's' : ''} for ${period.label}`}
           </p>
         </div>
         <Button onClick={handleAutoTag} variant="outline">
@@ -183,8 +187,8 @@ export default function TransactionsPage() {
 
       {/* Search + filter toolbar */}
       <div className="flex items-center gap-2">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="text-muted-foreground pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2" />
+        <div className="relative max-w-sm flex-1">
+          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2" />
           <Input
             placeholder="Search transactions…"
             value={search}
@@ -208,24 +212,24 @@ export default function TransactionsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[110px]">Date</TableHead>
+              <TableHead className="w-27.5">Date</TableHead>
               <TableHead>Name</TableHead>
-              <TableHead className="w-[105px] text-right">Debit</TableHead>
-              <TableHead className="w-[105px] text-right">Credit</TableHead>
+              <TableHead className="w-26.25 text-right">Debit</TableHead>
+              <TableHead className="w-26.25 text-right">Credit</TableHead>
               <TableHead>Tags</TableHead>
-              <TableHead className="w-[56px] text-center">Notes</TableHead>
+              <TableHead className="w-14 text-center">Notes</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-muted-foreground text-center py-8">
+                <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </TableCell>
               </TableRow>
             ) : transactions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-muted-foreground text-center py-8">
+                <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
                   {debouncedSearch || untaggedOnly
                     ? 'No transactions match the current filters.'
                     : 'No transactions for this period. Import some CSV files to get started.'}
@@ -234,7 +238,7 @@ export default function TransactionsPage() {
             ) : (
               transactions.map((tx) => (
                 <TransactionRow
-                  key={tx.id}
+                  key={`${tx.id}-${tx.tags.map((t) => t.id).join(',')}-${tx.notes ?? ''}`}
                   transaction={tx}
                   availableTags={tags}
                   onSetTags={handleSetTags}
@@ -284,7 +288,11 @@ function TransactionRow({
 }: {
   transaction: TransactionWithTags;
   availableTags: TagOption[];
-  onSetTags: (id: string, tagIds: string[], previousTags: TransactionWithTags['tags']) => Promise<TransactionWithTags['tags']>;
+  onSetTags: (
+    id: string,
+    tagIds: string[],
+    previousTags: TransactionWithTags['tags'],
+  ) => Promise<TransactionWithTags['tags']>;
   onUpdateNotes: (id: string, notes: string) => void;
 }) {
   // Local tag state for optimistic updates — keeps the popover open
@@ -293,15 +301,6 @@ function TransactionRow({
   const [localNotes, setLocalNotes] = useState(transaction.notes ?? '');
   // Sequence counter to ignore stale responses from concurrent requests
   const tagRequestSeqRef = useRef(0);
-
-  // Sync when transaction is refreshed (e.g. after auto-tag)
-  useEffect(() => {
-    setLocalTags(transaction.tags);
-  }, [transaction.tags]);
-
-  useEffect(() => {
-    setLocalNotes(transaction.notes ?? '');
-  }, [transaction.notes]);
 
   const nonSourceTags = localTags.filter((t) => !t.isSource);
   const sourceTags = localTags.filter((t) => t.isSource);
@@ -338,7 +337,7 @@ function TransactionRow({
 
       {/* Name + source */}
       <TableCell>
-        <div className="text-sm font-medium leading-tight">{transaction.name}</div>
+        <div className="text-sm leading-tight font-medium">{transaction.name}</div>
         {transaction.source && (
           <div className="text-muted-foreground text-xs">{transaction.source}</div>
         )}
@@ -361,7 +360,9 @@ function TransactionRow({
       {/* Credit */}
       <TableCell className="text-right text-sm tabular-nums">
         {transaction.credit > 0 ? (
-          <span className="text-green-600 dark:text-green-400">{formatCurrency(transaction.credit)}</span>
+          <span className="text-green-600 dark:text-green-400">
+            {formatCurrency(transaction.credit)}
+          </span>
         ) : null}
       </TableCell>
 
@@ -388,7 +389,9 @@ function TransactionRow({
             </PopoverTrigger>
             <PopoverContent className="w-52 p-2" align="start">
               {availableTags.length === 0 ? (
-                <p className="text-muted-foreground p-1 text-xs">No tags available. Create some in Tags.</p>
+                <p className="text-muted-foreground p-1 text-xs">
+                  No tags available. Create some in Tags.
+                </p>
               ) : (
                 <div className="max-h-52 space-y-0.5 overflow-y-auto">
                   {availableTags.map((tag) => {
@@ -398,7 +401,7 @@ function TransactionRow({
                         key={tag.id}
                         type="button"
                         className={cn(
-                          'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted',
+                          'hover:bg-muted flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors',
                           isSelected && 'bg-muted',
                         )}
                         onClick={() => toggleTag(tag.id)}
@@ -408,9 +411,7 @@ function TransactionRow({
                           style={{ backgroundColor: tag.color }}
                         />
                         <span className="truncate">{tag.name}</span>
-                        {isSelected && (
-                          <span className="ml-auto text-xs opacity-70">✓</span>
-                        )}
+                        {isSelected && <span className="ml-auto text-xs opacity-70">✓</span>}
                       </button>
                     );
                   })}
@@ -441,7 +442,7 @@ function TransactionRow({
               onChange={(e) => setLocalNotes(e.target.value)}
               onBlur={() => onUpdateNotes(transaction.id, localNotes)}
               placeholder="Add notes…"
-              className="min-h-[72px] resize-none text-sm"
+              className="min-h-18 resize-none text-sm"
               rows={3}
             />
           </PopoverContent>

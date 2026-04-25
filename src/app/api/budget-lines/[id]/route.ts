@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 // GET /api/budget-lines/:id - Fetch a single budget line
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   const budgetLine = await prisma.budgetLine.findUnique({
@@ -37,7 +34,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   try {
     // Update budget line
-    const budgetLine = await prisma.budgetLine.update({
+    await prisma.budgetLine.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),

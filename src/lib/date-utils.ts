@@ -127,7 +127,7 @@ export function getCompletePeriodsBetween(
     }
   } else if (budgetPeriod === 'biweekly') {
     // Start from the given date and step by 14 days
-    let current = new Date(fromDate);
+    const current = new Date(fromDate);
     while (current < toDate) {
       const periodEnd = new Date(current);
       periodEnd.setDate(periodEnd.getDate() + 13);

@@ -94,13 +94,11 @@ function StepIndicator({ current }: { current: Step }) {
               {done ? <Check className="h-3.5 w-3.5" /> : i + 1}
             </div>
             <span
-              className={`text-sm ${active ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}
+              className={`text-sm ${active ? 'text-foreground font-semibold' : 'text-muted-foreground'}`}
             >
               {STEP_LABELS[s]}
             </span>
-            {i < STEPS.length - 1 && (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            )}
+            {i < STEPS.length - 1 && <ChevronRight className="text-muted-foreground h-4 w-4" />}
           </div>
         );
       })}
@@ -118,20 +116,20 @@ function RowStatusBadge({ row }: { row: ParsedTransaction }) {
   }
   if (row.isDuplicateInDb) {
     return (
-      <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-200 text-xs">
+      <Badge className="bg-yellow-100 text-xs text-yellow-800 hover:bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-200">
         Duplicate
       </Badge>
     );
   }
   if (row.isDuplicateInCsv) {
     return (
-      <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100 dark:bg-orange-900 dark:text-orange-200 text-xs">
+      <Badge className="bg-orange-100 text-xs text-orange-800 hover:bg-orange-100 dark:bg-orange-900 dark:text-orange-200">
         CSV Dup
       </Badge>
     );
   }
   return (
-    <Badge className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900 dark:text-green-200 text-xs">
+    <Badge className="bg-green-100 text-xs text-green-800 hover:bg-green-100 dark:bg-green-900 dark:text-green-200">
       New
     </Badge>
   );
@@ -186,15 +184,16 @@ export default function ImportPage() {
     const res = await fetch('/api/tags');
     if (res.ok) {
       const tags = await res.json();
-      setSourceTags(
-        tags.filter((t: SourceTag & { isSource: boolean }) => t.isSource),
-      );
+      setSourceTags(tags.filter((t: SourceTag & { isSource: boolean }) => t.isSource));
     }
   }, []);
 
   useEffect(() => {
-    fetchMappings();
-    fetchSourceTags();
+    const timeoutId = setTimeout(() => {
+      void fetchMappings();
+      void fetchSourceTags();
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [fetchMappings, fetchSourceTags]);
 
   // ---- Handlers ----
@@ -399,7 +398,7 @@ export default function ImportPage() {
             </CardHeader>
             <CardContent>
               <div
-                className="cursor-pointer rounded-lg border-2 border-dashed p-10 text-center transition-colors hover:border-primary"
+                className="hover:border-primary cursor-pointer rounded-lg border-2 border-dashed p-10 text-center transition-colors"
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
@@ -416,11 +415,11 @@ export default function ImportPage() {
                   }
                 }}
               >
-                <Upload className="mx-auto h-10 w-10 text-muted-foreground" />
+                <Upload className="text-muted-foreground mx-auto h-10 w-10" />
                 <p className="mt-2 font-medium">
                   {file ? file.name : 'Click or drag a CSV file here'}
                 </p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   {file ? `${(file.size / 1024).toFixed(1)} KB` : 'Accepted format: .csv'}
                 </p>
                 <input
@@ -434,7 +433,7 @@ export default function ImportPage() {
 
               {csvHeaders.length > 0 && (
                 <div className="mt-4">
-                  <p className="mb-2 text-sm font-medium text-muted-foreground">
+                  <p className="text-muted-foreground mb-2 text-sm font-medium">
                     File preview — {csvHeaders.length} columns detected
                   </p>
                   <div className="overflow-x-auto rounded border">
@@ -442,7 +441,10 @@ export default function ImportPage() {
                       <thead className="bg-muted">
                         <tr>
                           {csvHeaders.map((column, i) => (
-                            <th key={i} className="whitespace-nowrap px-3 py-2 text-left font-medium">
+                            <th
+                              key={i}
+                              className="px-3 py-2 text-left font-medium whitespace-nowrap"
+                            >
                               {renderColumnLabel(column)}
                             </th>
                           ))}
@@ -500,19 +502,17 @@ export default function ImportPage() {
                       >
                         <div className="min-w-0">
                           <span className="text-sm font-medium">{m.name}</span>
-                          <span className="ml-2 truncate text-xs text-muted-foreground">
+                          <span className="text-muted-foreground ml-2 truncate text-xs">
                             {renderColumnLabel(m.dateColumn)} · {renderColumnLabel(m.nameColumn)} ·{' '}
                             {renderColumnLabel(m.debitColumn)}/{renderColumnLabel(m.creditColumn)}
                           </span>
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
-                          {selectedMappingId === m.id && (
-                            <Check className="h-4 w-4 text-primary" />
-                          )}
+                          {selectedMappingId === m.id && <Check className="text-primary h-4 w-4" />}
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            className="text-muted-foreground hover:text-destructive h-7 w-7"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDeleteMapping(m.id);
@@ -526,7 +526,7 @@ export default function ImportPage() {
                   </div>
                   {selectedMappingId && (
                     <button
-                      className="mt-1.5 text-xs text-muted-foreground hover:text-foreground underline"
+                      className="text-muted-foreground hover:text-foreground mt-1.5 text-xs underline"
                       onClick={handleClearSavedMapping}
                     >
                       Clear selection (configure manually)
@@ -539,7 +539,7 @@ export default function ImportPage() {
               {/* Mapping form */}
               {csvHeaders.length > 0 && (
                 <div>
-                  <p className="mb-2 text-sm font-medium text-muted-foreground">
+                  <p className="text-muted-foreground mb-2 text-sm font-medium">
                     File preview — {csvHeaders.length} columns detected
                   </p>
                   <div className="overflow-x-auto rounded border">
@@ -547,7 +547,10 @@ export default function ImportPage() {
                       <thead className="bg-muted">
                         <tr>
                           {csvHeaders.map((column, i) => (
-                            <th key={i} className="whitespace-nowrap px-3 py-2 text-left font-medium">
+                            <th
+                              key={i}
+                              className="px-3 py-2 text-left font-medium whitespace-nowrap"
+                            >
                               {renderColumnLabel(column)}
                             </th>
                           ))}
@@ -741,7 +744,7 @@ export default function ImportPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="text-muted-foreground mt-1 text-xs">
                     All imported transactions will be tagged with this source tag.
                   </p>
                 </div>
@@ -756,7 +759,7 @@ export default function ImportPage() {
               )}
 
               {previewError && (
-                <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                <div className="bg-destructive/10 text-destructive flex items-center gap-2 rounded-md p-3 text-sm">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   {previewError}
                 </div>
@@ -805,7 +808,7 @@ export default function ImportPage() {
               <Card key={label}>
                 <CardContent className="p-4 text-center">
                   <p className={`text-3xl font-bold ${color}`}>{value}</p>
-                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className="text-muted-foreground text-xs">{label}</p>
                 </CardContent>
               </Card>
             ))}
@@ -821,9 +824,7 @@ export default function ImportPage() {
                 <TabsList className="mb-4 h-auto flex-wrap gap-1">
                   <TabsTrigger value="all">All ({preview.total})</TabsTrigger>
                   <TabsTrigger value="new">New ({preview.newCount})</TabsTrigger>
-                  <TabsTrigger value="duplicates">
-                    Duplicates ({preview.duplicates})
-                  </TabsTrigger>
+                  <TabsTrigger value="duplicates">Duplicates ({preview.duplicates})</TabsTrigger>
                   {preview.errors > 0 && (
                     <TabsTrigger value="errors">Errors ({preview.errors})</TabsTrigger>
                   )}
@@ -857,7 +858,7 @@ export default function ImportPage() {
                               <TableRow>
                                 <TableCell
                                   colSpan={hasSourceColumn ? 6 : 5}
-                                  className="py-10 text-center text-muted-foreground"
+                                  className="text-muted-foreground py-10 text-center"
                                 >
                                   No rows in this category
                                 </TableCell>
@@ -882,7 +883,7 @@ export default function ImportPage() {
                                   </TableCell>
                                   <TableCell className="max-w-xs">
                                     <span
-                                      className={`block truncate text-sm ${row.error ? 'italic text-destructive' : ''}`}
+                                      className={`block truncate text-sm ${row.error ? 'text-destructive italic' : ''}`}
                                       title={row.error || row.name}
                                     >
                                       {row.error ? row.error : row.name}
@@ -895,7 +896,7 @@ export default function ImportPage() {
                                     {row.credit > 0 ? `$${row.credit.toFixed(2)}` : '—'}
                                   </TableCell>
                                   {hasSourceColumn && (
-                                    <TableCell className="max-w-32 truncate text-xs text-muted-foreground">
+                                    <TableCell className="text-muted-foreground max-w-32 truncate text-xs">
                                       {row.source}
                                     </TableCell>
                                   )}
@@ -937,7 +938,7 @@ export default function ImportPage() {
           </div>
 
           {preview.newCount === 0 && (
-            <p className="text-center text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-center text-sm">
               No new transactions to import — all rows are duplicates or have errors.
             </p>
           )}
@@ -974,16 +975,16 @@ export default function ImportPage() {
                 ).map(({ label, value, color }) => (
                   <div key={label} className="text-center">
                     <p className={`text-3xl font-bold ${color}`}>{value}</p>
-                    <p className="text-sm text-muted-foreground">{label}</p>
+                    <p className="text-muted-foreground text-sm">{label}</p>
                   </div>
                 ))}
               </div>
 
               {result.errors > 0 && (
-                <div className="flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <div className="bg-destructive/10 text-destructive flex items-center gap-2 rounded-md px-3 py-2 text-sm">
                   <AlertCircle className="h-4 w-4 shrink-0" />
-                  {result.errors} row{result.errors !== 1 ? 's' : ''} could not be imported due
-                  to parse errors.
+                  {result.errors} row{result.errors !== 1 ? 's' : ''} could not be imported due to
+                  parse errors.
                 </div>
               )}
 

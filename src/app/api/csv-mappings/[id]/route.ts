@@ -7,7 +7,16 @@ type RouteContext = { params: Promise<{ id: string }> };
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   const { id } = await params;
   const body = await request.json();
-  const { name, dateColumn, nameColumn, debitColumn, creditColumn, sourceColumn, dateFormat, sourceTagId } = body;
+  const {
+    name,
+    dateColumn,
+    nameColumn,
+    debitColumn,
+    creditColumn,
+    sourceColumn,
+    dateFormat,
+    sourceTagId,
+  } = body;
 
   if (!name || !dateColumn || !nameColumn || !debitColumn || !creditColumn) {
     return NextResponse.json(

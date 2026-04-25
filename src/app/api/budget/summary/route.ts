@@ -89,8 +89,7 @@ export async function GET(request: NextRequest) {
   const needsHistory = rolloverLines.length > 0 && earliestTx !== null;
 
   // Compute the earliest date we need transactions for (rollover history or view start)
-  const historyStart =
-    needsHistory && earliestTx ? earliestTx.date : viewPeriod.start;
+  const historyStart = needsHistory && earliestTx ? earliestTx.date : viewPeriod.start;
   const effectiveStart = historyStart < viewPeriod.start ? historyStart : viewPeriod.start;
 
   // Load ALL transactions we'll ever need in one query
@@ -124,9 +123,7 @@ export async function GET(request: NextRequest) {
   function computeActual(txs: typeof allTransactions, tagSet: Set<string>): number {
     let total = 0;
     for (const tx of txs) {
-      const nonSourceTagIds = tx.tags
-        .filter((tt) => !tt.tag.isSource)
-        .map((tt) => tt.tag.id);
+      const nonSourceTagIds = tx.tags.filter((tt) => !tt.tag.isSource).map((tt) => tt.tag.id);
 
       if (nonSourceTagIds.length === 0) continue;
 
@@ -159,11 +156,7 @@ export async function GET(request: NextRequest) {
 
     let rolloverAmount = 0;
     if (bl.rollover && earliestTx) {
-      const completePeriods = getCompletePeriodsBetween(
-        period,
-        earliestTx.date,
-        viewPeriod.start,
-      );
+      const completePeriods = getCompletePeriodsBetween(period, earliestTx.date, viewPeriod.start);
 
       for (const p of completePeriods) {
         const periodBudget = scaleBudgetAmount(bl.amount, period, {
@@ -174,9 +167,7 @@ export async function GET(request: NextRequest) {
         });
 
         // Filter already-loaded historical transactions to this sub-period
-        const periodTxs = historicalTxs.filter(
-          (tx) => tx.date >= p.start && tx.date <= p.end,
-        );
+        const periodTxs = historicalTxs.filter((tx) => tx.date >= p.start && tx.date <= p.end);
         const periodActual = computeActual(periodTxs, tagSet);
         rolloverAmount += periodBudget - periodActual;
       }
