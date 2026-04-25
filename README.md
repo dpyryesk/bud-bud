@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Budget Buddy (BudBud)
+
+Budget Buddy is a personal budgeting app for tracking transactions, organizing spending with tags, and planning monthly budgets with budget lines. It also supports CSV import so you can quickly bring in data from your bank and map columns once for reuse.
+
+## Features
+
+- Dashboard summary of budget vs. actual spending
+- Transaction management with manual tag assignment
+- Tag management (create, edit, and organize tags)
+- Budget lines with planned amounts per time period
+- CSV import with preview and column mapping
+- Auto-tagging rules to speed up transaction categorization
 
 ## Getting Started
 
-First, run the development server:
+### 1) Install dependencies
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2) Configure environment
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Copy `.env.example` to `.env` and set the database URL.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3) Run database setup
 
-## Learn More
+```bash
+pnpm prisma migrate dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 4) Start the development server
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pnpm dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open [http://localhost:3000](http://localhost:3000).
 
-## Deploy on Vercel
+## How to Use the App
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 1) Create tags
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Open **Tags** in the sidebar.
+2. Click **Create Tag**.
+3. Enter a tag name (for example: `Groceries`, `Rent`, `Utilities`, `Dining Out`).
+4. Save the tag.
+5. Repeat for all categories you want to track.
+
+Tip: Keep tag names consistent and simple to make reporting clearer.
+
+### 2) Create budget lines
+
+1. Open **Budget** in the sidebar.
+2. Click **Add Budget Line**.
+3. Select the period you want to plan for.
+4. Choose a tag for the line.
+5. Enter the planned amount for that category.
+6. Save and repeat for each tag/category you budget.
+
+Tip: Start with high-level categories first, then split into finer categories later if needed.
+
+### 3) Import CSV files
+
+1. Open **Import** in the sidebar.
+2. Upload your bank/export CSV file.
+3. Review the preview table.
+4. Map CSV columns (date, description, debit, credit, etc.) to app fields.
+5. Save mapping, so future imports are faster.
+6. Confirm import to create transactions.
+
+Tip: Use a small sample CSV first to verify mapping behavior before importing a full statement history.
+
+### 4) Tag transactions
+
+1. Open **Transactions** in the sidebar.
+2. Filter or search for untagged transactions.
+3. Open a transaction and assign one or more tags.
+4. Save changes.
+5. (Optional) Create auto-tag rules for repeated merchant patterns.
+
+Tip: After tagging, revisit **Budget** and **Dashboard** to confirm spending is landing in the expected categories.
+
+## Recommended Workflow
+
+1. Create your base tags.
+2. Create budget lines for those tags.
+3. Import CSV transactions.
+4. Tag uncategorized transactions.
+5. Review the budget summary and adjust budget lines over time.
