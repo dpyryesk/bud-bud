@@ -6,7 +6,7 @@
 [x] Build layout, navigation, and global time period selector with context
 [x] Build tag management — CRUD API + tree UI + color picker + source tag support
 [x] Build CSV import — mapping config, parser, duplicate detection, source tag assignment, preview
-[ ] Build auto-tagging — engine, rule management, exact-match lookup, regex matching
+[x] Build auto-tagging — engine, rule management, exact-match lookup, regex matching
 [ ] Build transactions view — table, period filtering, tag assignment, notes, auto-tag button
 [ ] Build budget line management — CRUD API + form UI
 [ ] Build budget view — calculations with scaling, rollup, split, rollover + display
