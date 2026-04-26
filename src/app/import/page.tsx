@@ -15,7 +15,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -34,108 +33,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import Papa from 'papaparse';
-import type { ImportPreview, ImportResult, ParsedTransaction } from '@/types';
-
-// ---- Local types ----
-
-type CsvMapping = {
-  id: string;
-  name: string;
-  dateColumn: string;
-  nameColumn: string;
-  debitColumn: string;
-  creditColumn: string;
-  sourceColumn: string;
-  dateFormat: string;
-  sourceTagId: string | null;
-};
-
-type SourceTag = { id: string; name: string; color: string };
-
-type Step = 'upload' | 'configure' | 'preview' | 'done';
-
-// ---- Constants ----
-
-const STEPS: Step[] = ['upload', 'configure', 'preview', 'done'];
-const STEP_LABELS: Record<Step, string> = {
-  upload: 'Upload',
-  configure: 'Configure',
-  preview: 'Preview',
-  done: 'Done',
-};
-
-const DATE_FORMATS = [
-  { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD (ISO)' },
-  { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY (US)' },
-  { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY (EU)' },
-  { value: 'MM-DD-YYYY', label: 'MM-DD-YYYY' },
-];
-
-// ---- Sub-components ----
-
-function StepIndicator({ current }: { current: Step }) {
-  const currentIndex = STEPS.indexOf(current);
-  return (
-    <nav className="mb-6 flex flex-wrap items-center gap-1">
-      {STEPS.map((s, i) => {
-        const done = i < currentIndex;
-        const active = i === currentIndex;
-        return (
-          <div key={s} className="flex items-center gap-1">
-            <div
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors ${
-                active
-                  ? 'bg-primary text-primary-foreground'
-                  : done
-                    ? 'bg-green-600 text-white'
-                    : 'bg-muted text-muted-foreground'
-              }`}
-            >
-              {done ? <Check className="h-3.5 w-3.5" /> : i + 1}
-            </div>
-            <span
-              className={`text-sm ${active ? 'text-foreground font-semibold' : 'text-muted-foreground'}`}
-            >
-              {STEP_LABELS[s]}
-            </span>
-            {i < STEPS.length - 1 && <ChevronRight className="text-muted-foreground h-4 w-4" />}
-          </div>
-        );
-      })}
-    </nav>
-  );
-}
-
-function RowStatusBadge({ row }: { row: ParsedTransaction }) {
-  if (row.error) {
-    return (
-      <Badge variant="destructive" className="text-xs">
-        Error
-      </Badge>
-    );
-  }
-  if (row.isDuplicateInDb) {
-    return (
-      <Badge className="bg-yellow-100 text-xs text-yellow-800 hover:bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-200">
-        Duplicate
-      </Badge>
-    );
-  }
-  if (row.isDuplicateInCsv) {
-    return (
-      <Badge className="bg-orange-100 text-xs text-orange-800 hover:bg-orange-100 dark:bg-orange-900 dark:text-orange-200">
-        CSV Dup
-      </Badge>
-    );
-  }
-  return (
-    <Badge className="bg-green-100 text-xs text-green-800 hover:bg-green-100 dark:bg-green-900 dark:text-green-200">
-      New
-    </Badge>
-  );
-}
-
-// ---- Main component ----
+import type { ImportPreview, ImportResult } from '@/types';
+import { Step, CsvMapping, SourceTag, DATE_FORMATS } from '@/components/import/constants';
+import StepIndicator from '@/components/import/import-step-indicator';
+import RowStatusBadge from '@/components/import/import-row-status-badge';
 
 export default function ImportPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
