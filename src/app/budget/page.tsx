@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, RefreshCw, GripVertical, FolderPlus } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -10,301 +10,25 @@ import {
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-  arrayMove,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { useTimePeriod } from '@/hooks/use-time-period';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { TagBadge } from '@/components/tags/tag-badge';
-import { formatCurrency } from '@/lib/date-utils';
+import { buildTagsInDisplayOrder } from '@/lib/tag-tree';
 import { cn } from '@/lib/utils';
+import { ROW_GRID, type TagOption, type TagOptionWithLevel } from '@/components/budget/constants';
+import { SortableCategorySection } from '@/components/budget/sortable-category-section';
+import { UncategorizedSection } from '@/components/budget/uncategorized-section';
+import { BudgetLineDialog } from '@/components/budget/budget-line-dialog';
+import { BudgetCategoryDialog } from '@/components/budget/budget-category-dialog';
+import { BudgetSummaryCards } from '@/components/budget/budget-summary-cards';
 import type { BudgetSummaryLine, BudgetCategory } from '@/types';
 
-// ---- Types ----
-type TagOption = { id: string; name: string; color: string; isSource: boolean };
-
-// ---- Grid layout shared by header, category, and line rows ----
-const ROW_GRID =
-  'grid grid-cols-[2rem_minmax(8rem,1fr)_minmax(8rem,1fr)_5rem_7rem_7rem_7rem_5rem] items-center gap-x-3';
-
-// ---- SortableLineRow ----
-function SortableLineRow({
-  line,
-  onEdit,
-  onDelete,
-}: {
-  line: BudgetSummaryLine;
-  onEdit: (line: BudgetSummaryLine) => void;
-  onDelete: (id: string) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: line.budgetLine.id,
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.4 : 1,
-      }}
-      className={cn(
-        ROW_GRID,
-        'hover:bg-muted/20 border-b px-3 py-2 text-sm last:border-b-0',
-        isDragging && 'bg-muted/30',
-      )}
-    >
-      {/* Drag handle */}
-      <button
-        {...attributes}
-        {...listeners}
-        className="text-muted-foreground hover:text-foreground cursor-grab touch-none"
-        aria-label="Drag to reorder"
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
-
-      {/* Name */}
-      <div className="min-w-0">
-        <span className="font-medium">{line.budgetLine.name}</span>
-        {line.budgetLine.rollover && (
-          <span className="text-muted-foreground ml-1 text-xs" title="Rollover enabled">
-            🔄
-          </span>
-        )}
-        {line.rolloverAmount !== 0 && (
-          <div className="text-muted-foreground truncate text-xs">
-            Rollover: {formatCurrency(line.rolloverAmount)}
-          </div>
-        )}
-      </div>
-
-      {/* Tags */}
-      <div className="flex min-w-0 flex-wrap gap-1">
-        {line.budgetLine.tags.map((t) => (
-          <TagBadge key={t.id} name={t.name} color={t.color} className="text-xs" />
-        ))}
-      </div>
-
-      {/* Period */}
-      <div className="text-muted-foreground capitalize">{line.budgetLine.period}</div>
-
-      {/* Budget */}
-      <div className="text-right tabular-nums">{formatCurrency(line.effectiveBudget)}</div>
-
-      {/* Actual */}
-      <div className="text-right tabular-nums">{formatCurrency(line.actualSpending)}</div>
-
-      {/* Remaining */}
-      <div
-        className={cn(
-          'text-right font-medium tabular-nums',
-          line.remaining >= 0 ? 'text-green-600' : 'text-red-600',
-        )}
-      >
-        {formatCurrency(line.remaining)}
-      </div>
-
-      {/* Actions */}
-      <div className="flex justify-end gap-1">
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(line)}>
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-destructive h-7 w-7"
-          onClick={() => onDelete(line.budgetLine.id)}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ---- SortableCategorySection ----
-function SortableCategorySection({
-  category,
-  lines,
-  onEditCategory,
-  onDeleteCategory,
-  onEditLine,
-  onDeleteLine,
-}: {
-  category: BudgetCategory;
-  lines: BudgetSummaryLine[];
-  onEditCategory: (cat: BudgetCategory) => void;
-  onDeleteCategory: (id: string) => void;
-  onEditLine: (line: BudgetSummaryLine) => void;
-  onDeleteLine: (id: string) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: category.id,
-  });
-
-  const subtotalBudget = lines.reduce((s, l) => s + l.effectiveBudget, 0);
-  const subtotalActual = lines.reduce((s, l) => s + l.actualSpending, 0);
-  const subtotalRemaining = subtotalBudget - subtotalActual;
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.4 : 1,
-      }}
-      className={cn('border-b last:border-b-0', isDragging && 'bg-muted/30')}
-    >
-      {/* Category header row */}
-      <div className={cn(ROW_GRID, 'bg-muted/50 px-3 py-2 font-semibold')}>
-        <button
-          {...attributes}
-          {...listeners}
-          className="text-muted-foreground hover:text-foreground cursor-grab touch-none"
-          aria-label="Drag to reorder category"
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-
-        {/* Category name spans name + tags + period columns */}
-        <div className="col-span-3 flex items-center gap-2 text-sm">
-          <span>{category.name}</span>
-          {lines.length === 0 && (
-            <span className="text-muted-foreground text-xs font-normal">(empty)</span>
-          )}
-        </div>
-
-        {/* Subtotals */}
-        <div className="text-right text-sm tabular-nums">{formatCurrency(subtotalBudget)}</div>
-        <div className="text-right text-sm tabular-nums">{formatCurrency(subtotalActual)}</div>
-        <div
-          className={cn(
-            'text-right text-sm font-semibold tabular-nums',
-            subtotalRemaining >= 0 ? 'text-green-600' : 'text-red-600',
-          )}
-        >
-          {formatCurrency(subtotalRemaining)}
-        </div>
-
-        {/* Category actions */}
-        <div className="flex justify-end gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => onEditCategory(category)}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-destructive h-7 w-7"
-            onClick={() => onDeleteCategory(category.id)}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Lines within this category */}
-      <SortableContext
-        items={lines.map((l) => l.budgetLine.id)}
-        strategy={verticalListSortingStrategy}
-      >
-        {lines.map((line) => (
-          <SortableLineRow
-            key={line.budgetLine.id}
-            line={line}
-            onEdit={onEditLine}
-            onDelete={onDeleteLine}
-          />
-        ))}
-      </SortableContext>
-    </div>
-  );
-}
-
-// ---- UncategorizedSection ----
-function UncategorizedSection({
-  lines,
-  onEditLine,
-  onDeleteLine,
-}: {
-  lines: BudgetSummaryLine[];
-  onEditLine: (line: BudgetSummaryLine) => void;
-  onDeleteLine: (id: string) => void;
-}) {
-  const subtotalBudget = lines.reduce((s, l) => s + l.effectiveBudget, 0);
-  const subtotalActual = lines.reduce((s, l) => s + l.actualSpending, 0);
-  const subtotalRemaining = subtotalBudget - subtotalActual;
-
-  return (
-    <div className="border-b last:border-b-0">
-      {/* Uncategorized header */}
-      <div className={cn(ROW_GRID, 'bg-muted/30 px-3 py-2 font-semibold')}>
-        <div /> {/* no drag handle */}
-        <div className="text-muted-foreground col-span-3 text-sm">Uncategorized</div>
-        <div className="text-right text-sm tabular-nums">{formatCurrency(subtotalBudget)}</div>
-        <div className="text-right text-sm tabular-nums">{formatCurrency(subtotalActual)}</div>
-        <div
-          className={cn(
-            'text-right text-sm font-semibold tabular-nums',
-            subtotalRemaining >= 0 ? 'text-green-600' : 'text-red-600',
-          )}
-        >
-          {formatCurrency(subtotalRemaining)}
-        </div>
-        <div /> {/* no actions */}
-      </div>
-      <SortableContext
-        items={lines.map((l) => l.budgetLine.id)}
-        strategy={verticalListSortingStrategy}
-      >
-        {lines.map((line) => (
-          <SortableLineRow
-            key={line.budgetLine.id}
-            line={line}
-            onEdit={onEditLine}
-            onDelete={onDeleteLine}
-          />
-        ))}
-      </SortableContext>
-    </div>
-  );
-}
-
-// ---- Main Page ----
 export default function BudgetPage() {
   const { period } = useTimePeriod();
 
   // Raw data from API
   const [summaryLines, setSummaryLines] = useState<BudgetSummaryLine[]>([]);
-  const [tags, setTags] = useState<TagOption[]>([]);
+  const [tags, setTags] = useState<TagOptionWithLevel[]>([]);
   const [loading, setLoading] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
@@ -313,22 +37,11 @@ export default function BudgetPage() {
   const [groupedLines, setGroupedLines] = useState<Record<string, BudgetSummaryLine[]>>({});
   const [uncategorizedLines, setUncategorizedLines] = useState<BudgetSummaryLine[]>([]);
 
-  // Budget line form state
+  // Dialog state — dialogs own their form state internally
   const [lineDialogOpen, setLineDialogOpen] = useState(false);
-  const [editingLineId, setEditingLineId] = useState<string | null>(null);
-  const [formName, setFormName] = useState('');
-  const [formPeriod, setFormPeriod] = useState('monthly');
-  const [formAmount, setFormAmount] = useState('');
-  const [formRollover, setFormRollover] = useState(false);
-  const [formTagIds, setFormTagIds] = useState<string[]>([]);
-  const [formCategoryId, setFormCategoryId] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
-
-  // Category form state
+  const [editingLine, setEditingLine] = useState<BudgetSummaryLine | null>(null);
   const [catDialogOpen, setCatDialogOpen] = useState(false);
-  const [editingCatId, setEditingCatId] = useState<string | null>(null);
-  const [catFormName, setCatFormName] = useState('');
-  const [catFormError, setCatFormError] = useState<string | null>(null);
+  const [editingCategory, setEditingCategory] = useState<BudgetCategory | null>(null);
 
   // DnD sensors
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -357,12 +70,12 @@ export default function BudgetPage() {
   const fetchTags = useCallback(async () => {
     const res = await fetch('/api/tags');
     const data = await res.json();
-    setTags(data.filter((t: TagOption) => !t.isSource));
+    const categoryTags = data.filter((t: TagOption) => !t.isSource);
+    setTags(buildTagsInDisplayOrder(categoryTags));
   }, []);
 
   const refresh = useCallback(async () => {
     const [cats, lines] = await Promise.all([fetchCategories(), fetchSummary()]);
-    // Build ordered display state
     setOrderedCategories(cats);
     const grouped: Record<string, BudgetSummaryLine[]> = {};
     for (const cat of cats) {
@@ -511,30 +224,20 @@ export default function BudgetPage() {
         }
       }
     },
-    [orderedCategories, groupedLines, uncategorizedLines, persistCategoryOrder, persistLineOrder],
+    [
+      orderedCategories,
+      groupedLines,
+      uncategorizedLines,
+      persistCategoryOrder,
+      persistLineOrder,
+      refresh,
+    ],
   );
 
-  // ---- Budget line CRUD ----
-
-  const resetLineForm = () => {
-    setFormName('');
-    setFormPeriod('monthly');
-    setFormAmount('');
-    setFormRollover(false);
-    setFormTagIds([]);
-    setFormCategoryId(null);
-    setEditingLineId(null);
-    setFormError(null);
-  };
+  // ---- Budget line actions ----
 
   const handleEditLine = (line: BudgetSummaryLine) => {
-    setEditingLineId(line.budgetLine.id);
-    setFormName(line.budgetLine.name);
-    setFormPeriod(line.budgetLine.period);
-    setFormAmount(line.budgetLine.amount.toString());
-    setFormRollover(line.budgetLine.rollover);
-    setFormTagIds(line.budgetLine.tags.map((t) => t.id));
-    setFormCategoryId(line.budgetLine.categoryId ?? null);
+    setEditingLine(line);
     setLineDialogOpen(true);
   };
 
@@ -550,77 +253,16 @@ export default function BudgetPage() {
     }
   };
 
-  const handleLineSubmit = async () => {
-    setFormError(null);
-    if (!formName.trim()) {
-      setFormError('Name is required.');
-      return;
-    }
-    const parsedAmount = parseFloat(formAmount);
-    if (!formAmount || isNaN(parsedAmount) || parsedAmount < 0) {
-      setFormError('Amount must be a valid non-negative number.');
-      return;
-    }
-
-    const payload = {
-      name: formName.trim(),
-      period: formPeriod,
-      amount: formAmount,
-      rollover: formRollover,
-      tagIds: formTagIds,
-      categoryId: formCategoryId,
-    };
-
-    if (editingLineId) {
-      setMutationError(null);
-      const res = await fetch(`/api/budget-lines/${editingLineId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      try {
-        await ensureOk(res);
-      } catch (error) {
-        setFormError(error instanceof Error ? error.message : 'Failed to update budget line.');
-        return;
-      }
-    } else {
-      setMutationError(null);
-      const res = await fetch('/api/budget-lines', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      try {
-        await ensureOk(res);
-      } catch (error) {
-        setFormError(error instanceof Error ? error.message : 'Failed to create budget line.');
-        return;
-      }
-    }
-
-    setLineDialogOpen(false);
-    resetLineForm();
+  const handleLineSuccess = async () => {
+    setMutationError(null);
+    setEditingLine(null);
     await refresh();
   };
 
-  const toggleFormTag = (tagId: string) => {
-    setFormTagIds((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
-    );
-  };
-
-  // ---- Category CRUD ----
-
-  const resetCatForm = () => {
-    setCatFormName('');
-    setEditingCatId(null);
-    setCatFormError(null);
-  };
+  // ---- Category actions ----
 
   const handleEditCategory = (cat: BudgetCategory) => {
-    setEditingCatId(cat.id);
-    setCatFormName(cat.name);
+    setEditingCategory(cat);
     setCatDialogOpen(true);
   };
 
@@ -636,43 +278,9 @@ export default function BudgetPage() {
     }
   };
 
-  const handleCatSubmit = async () => {
-    setCatFormError(null);
-    if (!catFormName.trim()) {
-      setCatFormError('Name is required.');
-      return;
-    }
-
-    if (editingCatId) {
-      setMutationError(null);
-      const res = await fetch(`/api/budget-categories/${editingCatId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: catFormName.trim() }),
-      });
-      try {
-        await ensureOk(res);
-      } catch (error) {
-        setCatFormError(error instanceof Error ? error.message : 'Failed to update category.');
-        return;
-      }
-    } else {
-      setMutationError(null);
-      const res = await fetch('/api/budget-categories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: catFormName.trim() }),
-      });
-      try {
-        await ensureOk(res);
-      } catch (error) {
-        setCatFormError(error instanceof Error ? error.message : 'Failed to create category.');
-        return;
-      }
-    }
-
-    setCatDialogOpen(false);
-    resetCatForm();
+  const handleCategorySuccess = async () => {
+    setMutationError(null);
+    setEditingCategory(null);
     await refresh();
   };
 
@@ -708,242 +316,42 @@ export default function BudgetPage() {
             <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
           </Button>
 
-          {/* Add Category */}
-          <Dialog
+          <BudgetCategoryDialog
             open={catDialogOpen}
             onOpenChange={(open) => {
               setCatDialogOpen(open);
-              if (!open) resetCatForm();
+              if (!open) setEditingCategory(null);
             }}
-          >
-            <DialogTrigger render={<Button variant="outline" />}>
-              <FolderPlus className="mr-2 h-4 w-4" />
-              Add Category
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{editingCatId ? 'Rename Category' : 'Create Category'}</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                {catFormError && (
-                  <p className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
-                    {catFormError}
-                  </p>
-                )}
-                <div>
-                  <Label>Name</Label>
-                  <Input
-                    value={catFormName}
-                    onChange={(e) => {
-                      setCatFormName(e.target.value);
-                      setCatFormError(null);
-                    }}
-                    placeholder="e.g., Housing"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') void handleCatSubmit();
-                    }}
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setCatDialogOpen(false);
-                      resetCatForm();
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button onClick={() => void handleCatSubmit()}>
-                    {editingCatId ? 'Save' : 'Create'}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+            editingCategory={editingCategory}
+            onSuccess={handleCategorySuccess}
+          />
 
-          {/* Add Budget Line */}
-          <Dialog
+          <BudgetLineDialog
             open={lineDialogOpen}
             onOpenChange={(open) => {
               setLineDialogOpen(open);
-              if (!open) resetLineForm();
+              if (!open) setEditingLine(null);
             }}
-          >
-            <DialogTrigger render={<Button />}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Budget Line
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>
-                  {editingLineId ? 'Edit Budget Line' : 'Create Budget Line'}
-                </DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                {formError && (
-                  <p className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
-                    {formError}
-                  </p>
-                )}
-                <div>
-                  <Label>Name</Label>
-                  <Input
-                    value={formName}
-                    onChange={(e) => {
-                      setFormName(e.target.value);
-                      setFormError(null);
-                    }}
-                    placeholder="e.g., Groceries"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Period</Label>
-                    <Select
-                      value={formPeriod}
-                      onValueChange={(v) => {
-                        if (v !== null) setFormPeriod(v);
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                        <SelectItem value="biweekly">Biweekly</SelectItem>
-                        <SelectItem value="yearly">Yearly</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Amount</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formAmount}
-                      onChange={(e) => {
-                        setFormAmount(e.target.value);
-                        setFormError(null);
-                      }}
-                      placeholder="500.00"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label>Category</Label>
-                  <Select
-                    value={formCategoryId ?? 'none'}
-                    onValueChange={(v) => setFormCategoryId(v === 'none' ? null : v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="No category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No category</SelectItem>
-                      {orderedCategories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="rollover"
-                    checked={formRollover}
-                    onChange={(e) => setFormRollover(e.target.checked)}
-                    className="rounded"
-                  />
-                  <Label htmlFor="rollover">
-                    Enable rollover (carry unspent/overspent to next period)
-                  </Label>
-                </div>
-                <div>
-                  <Label>Tags</Label>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {tags.map((tag) => {
-                      const isSelected = formTagIds.includes(tag.id);
-                      return (
-                        <button
-                          key={tag.id}
-                          type="button"
-                          onClick={() => toggleFormTag(tag.id)}
-                          className={cn(
-                            'rounded-full border px-3 py-1 text-xs transition-colors',
-                            isSelected ? 'border-current' : 'border-transparent opacity-50',
-                          )}
-                          style={{ color: tag.color, backgroundColor: `${tag.color}15` }}
-                        >
-                          {tag.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setLineDialogOpen(false);
-                      resetLineForm();
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button onClick={() => void handleLineSubmit()}>
-                    {editingLineId ? 'Update' : 'Create'}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+            editingLine={editingLine}
+            categories={orderedCategories}
+            tags={tags}
+            onSuccess={handleLineSuccess}
+          />
         </div>
       </div>
 
-      {/* Summary Cards */}
       {mutationError && (
         <p className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
           {mutationError}
         </p>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Budget</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalBudget)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Spending</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalActual)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Remaining</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={cn(
-                'text-2xl font-bold',
-                totalRemaining >= 0 ? 'text-green-600' : 'text-red-600',
-              )}
-            >
-              {formatCurrency(totalRemaining)}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Summary Cards */}
+      <BudgetSummaryCards
+        totalBudget={totalBudget}
+        totalActual={totalActual}
+        totalRemaining={totalRemaining}
+      />
 
       {/* Budget Lines Table */}
       <div className="rounded-md border">
