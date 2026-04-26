@@ -651,7 +651,7 @@ export default function ImportPage() {
 
                 <div>
                   <Label>
-                    Debit Column <span className="text-destructive">*</span>
+                    Debit Column (spending) <span className="text-destructive">*</span>
                   </Label>
                   <Select
                     value={debitColumn}
@@ -674,7 +674,7 @@ export default function ImportPage() {
 
                 <div>
                   <Label>
-                    Credit Column <span className="text-destructive">*</span>
+                    Credit Column (income/refunds) <span className="text-destructive">*</span>
                   </Label>
                   <Select
                     value={creditColumn}

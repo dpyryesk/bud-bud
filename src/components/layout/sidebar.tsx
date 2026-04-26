@@ -31,6 +31,176 @@ type SimpleTag = {
 
 type LeveledTag = TagWithLevel<SimpleTag>;
 
+function NewTagButton() {
+  const [open, setOpen] = useState(false);
+  const [tags, setTags] = useState<LeveledTag[]>([]);
+  const [name, setName] = useState('');
+  const [color, setColor] = useState('#6B7280');
+  const [parentId, setParentId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const openDialog = useCallback(async () => {
+    setOpen(true);
+    try {
+      const res = await fetch('/api/tags');
+      const data: SimpleTag[] = await res.json();
+      const categoryTags = data.filter((tag) => !tag.isSource);
+      setTags(buildTagsInDisplayOrder(categoryTags));
+    } catch {
+      // silently ignore; user will see empty parent list
+    }
+  }, []);
+
+  const reset = useCallback(() => {
+    setName('');
+    setColor('#6B7280');
+    setParentId('');
+    setSaving(false);
+    setError('');
+  }, []);
+
+  const handleCreate = useCallback(async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      const res = await fetch('/api/tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          color,
+          parentId: parentId || null,
+          isSource: false,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        setError(err.error ?? 'Failed to create tag');
+        return;
+      }
+      setOpen(false);
+      reset();
+    } finally {
+      setSaving(false);
+    }
+  }, [color, name, parentId, reset]);
+
+  const selectedParent = tags.find((t) => t.id === parentId);
+
+  return (
+    <>
+      <button
+        onClick={openDialog}
+        className={cn(
+          'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+          'text-muted-foreground hover:bg-muted hover:text-foreground',
+        )}
+      >
+        <Plus className="h-4 w-4" />
+        New Tag
+      </button>
+
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) reset();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create Tag</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Name */}
+            <div className="space-y-1">
+              <Label htmlFor="sidebar-tag-name">Name</Label>
+              <Input
+                id="sidebar-tag-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Groceries"
+                onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+                autoFocus
+              />
+              {error && <p className="text-destructive text-xs">{error}</p>}
+            </div>
+
+            {/* Color */}
+            <div className="space-y-1">
+              <Label htmlFor="sidebar-tag-color">Color</Label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="sidebar-tag-color"
+                  type="color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  className="h-8 w-10 cursor-pointer rounded border"
+                />
+                <span className="text-muted-foreground text-xs">{color}</span>
+              </div>
+            </div>
+
+            {/* Parent tag */}
+            <div className="space-y-1">
+              <Label>Parent Tag (optional)</Label>
+              <Select
+                value={parentId}
+                onValueChange={(v) => setParentId(v === '__none__' ? '' : (v ?? ''))}
+              >
+                <SelectTrigger>
+                  {selectedParent ? (
+                    <span className="flex items-center gap-1.5 text-sm">
+                      <span
+                        className="inline-block h-2.5 w-2.5 flex-none rounded-full"
+                        style={{ backgroundColor: selectedParent.color }}
+                      />
+                      {selectedParent.name}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">None (top-level)</span>
+                  )}
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None (top-level)</SelectItem>
+                  {tags.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      <span
+                        className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: t.color }}
+                      />
+                      <span style={{ marginLeft: `${t.level * 14}px` }}>{t.name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setOpen(false);
+                  reset();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleCreate} disabled={!name.trim() || saving}>
+                {saving ? 'Saving…' : 'Create'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function NewAutoTagRuleButton() {
   const [open, setOpen] = useState(false);
   const [tags, setTags] = useState<LeveledTag[]>([]);
@@ -270,6 +440,7 @@ export function Sidebar() {
         })}
 
         <div className="my-1 border-t" />
+        <NewTagButton />
         <NewAutoTagRuleButton />
       </nav>
     </aside>

@@ -13,7 +13,7 @@ export async function GET() {
         },
       },
     },
-    orderBy: { name: 'asc' },
+    orderBy: [{ categoryId: 'asc' }, { order: 'asc' }, { name: 'asc' }],
   });
 
   const formatted = budgetLines.map((bl) => ({
@@ -22,6 +22,8 @@ export async function GET() {
     period: bl.period,
     amount: bl.amount,
     rollover: bl.rollover,
+    order: bl.order,
+    categoryId: bl.categoryId,
     tags: bl.tags.map((blt) => blt.tag),
   }));
 
@@ -31,11 +33,18 @@ export async function GET() {
 // POST /api/budget-lines - Create a new budget line
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { name, period, amount, rollover, tagIds } = body;
+  const { name, period, amount, rollover, tagIds, categoryId } = body;
 
   if (!name || !period || amount === undefined) {
     return NextResponse.json({ error: 'name, period, and amount are required' }, { status: 400 });
   }
+
+  // Assign order as max + 1 within the category (or globally if uncategorized)
+  const maxOrder = await prisma.budgetLine.aggregate({
+    where: { categoryId: categoryId ?? null },
+    _max: { order: true },
+  });
+  const order = (maxOrder._max.order ?? -1) + 1;
 
   const budgetLine = await prisma.budgetLine.create({
     data: {
@@ -43,6 +52,8 @@ export async function POST(request: NextRequest) {
       period,
       amount: parseFloat(amount),
       rollover: rollover || false,
+      order,
+      categoryId: categoryId ?? null,
       tags: {
         create: (tagIds || []).map((tagId: string) => ({ tagId })),
       },
@@ -58,7 +69,13 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json(
     {
-      ...budgetLine,
+      id: budgetLine.id,
+      name: budgetLine.name,
+      period: budgetLine.period,
+      amount: budgetLine.amount,
+      rollover: budgetLine.rollover,
+      order: budgetLine.order,
+      categoryId: budgetLine.categoryId,
       tags: budgetLine.tags.map((blt) => blt.tag),
     },
     { status: 201 },

@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
   };
 
   // Load all data in parallel upfront - no N+1 in the loops below
-  const [budgetLines, allTags, earliestTx] = await Promise.all([
+  const [budgetLines, allTags, earliestTx, categories] = await Promise.all([
     prisma.budgetLine.findMany({
       include: {
         tags: {
@@ -58,12 +58,16 @@ export async function GET(request: NextRequest) {
           },
         },
       },
+      orderBy: [{ categoryId: 'asc' }, { order: 'asc' }, { name: 'asc' }],
     }),
     // Load all tags so we can build a complete children map in memory
     prisma.tag.findMany({ select: { id: true, parentId: true } }),
     prisma.transaction.findFirst({
       orderBy: { date: 'asc' },
       select: { date: true },
+    }),
+    prisma.budgetCategory.findMany({
+      orderBy: { order: 'asc' },
     }),
   ]);
 
@@ -76,6 +80,9 @@ export async function GET(request: NextRequest) {
       childrenMap.set(tag.parentId, existing);
     }
   }
+
+  // Build a category lookup map
+  const categoryMap = new Map(categories.map((c) => [c.id, c]));
 
   // Build expanded tag sets for every budget line
   const budgetLineTagSets = new Map<string, Set<string>>();
@@ -176,6 +183,9 @@ export async function GET(request: NextRequest) {
     const effectiveBudget = scaledBudget + rolloverAmount;
     const remaining = effectiveBudget - actualSpending;
 
+    // Look up category details
+    const category = bl.categoryId ? (categoryMap.get(bl.categoryId) ?? null) : null;
+
     summaryLines.push({
       budgetLine: {
         id: bl.id,
@@ -183,6 +193,9 @@ export async function GET(request: NextRequest) {
         period: bl.period,
         amount: bl.amount,
         rollover: bl.rollover,
+        order: bl.order,
+        categoryId: bl.categoryId,
+        category: category ? { id: category.id, name: category.name, order: category.order } : null,
         tags: bl.tags.map((blt) => blt.tag),
       },
       scaledBudget,

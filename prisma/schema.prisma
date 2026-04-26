@@ -52,15 +52,27 @@ model TransactionTag {
   @@unique([transactionId, tagId])
 }
 
+model BudgetCategory {
+  id          String       @id @default(cuid())
+  name        String
+  order       Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  budgetLines BudgetLine[]
+}
+
 model BudgetLine {
-  id        String          @id @default(cuid())
-  name      String
-  period    String // "monthly" | "biweekly" | "yearly"
-  amount    Float
-  rollover  Boolean         @default(false)
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
-  tags      BudgetLineTag[]
+  id         String          @id @default(cuid())
+  name       String
+  period     String // "monthly" | "biweekly" | "yearly"
+  amount     Float
+  rollover   Boolean         @default(false)
+  order      Int             @default(0)
+  categoryId String?
+  category   BudgetCategory? @relation(fields: [categoryId], references: [id])
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  tags       BudgetLineTag[]
 }
 
 model BudgetLineTag {

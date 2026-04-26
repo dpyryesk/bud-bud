@@ -35,12 +35,21 @@ export type TransactionWithTags = {
 
 // ---- Budget types ----
 
+export type BudgetCategory = {
+  id: string;
+  name: string;
+  order: number;
+};
+
 export type BudgetLineWithTags = {
   id: string;
   name: string;
   period: BudgetPeriodType;
   amount: number;
   rollover: boolean;
+  order: number;
+  categoryId: string | null;
+  category: BudgetCategory | null;
   tags: TagFlat[];
 };
 

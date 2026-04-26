@@ -21,7 +21,13 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   }
 
   return NextResponse.json({
-    ...budgetLine,
+    id: budgetLine.id,
+    name: budgetLine.name,
+    period: budgetLine.period,
+    amount: budgetLine.amount,
+    rollover: budgetLine.rollover,
+    order: budgetLine.order,
+    categoryId: budgetLine.categoryId,
     tags: budgetLine.tags.map((blt) => blt.tag),
   });
 }
@@ -30,9 +36,31 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await request.json();
-  const { name, period, amount, rollover, tagIds } = body;
+  const { name, period, amount, rollover, tagIds, categoryId } = body;
 
   try {
+    const existing = await prisma.budgetLine.findUnique({
+      where: { id },
+      select: { categoryId: true },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Budget line not found' }, { status: 404 });
+    }
+
+    const hasCategoryId = Object.prototype.hasOwnProperty.call(body, 'categoryId');
+    const nextCategoryId = hasCategoryId ? (categoryId ?? null) : existing.categoryId;
+
+    let nextOrder: number | undefined;
+    if (hasCategoryId && existing.categoryId !== nextCategoryId) {
+      // If moved between categories, append to the end of destination category
+      const maxOrder = await prisma.budgetLine.aggregate({
+        where: { categoryId: nextCategoryId },
+        _max: { order: true },
+      });
+      nextOrder = (maxOrder._max.order ?? -1) + 1;
+    }
+
     // Update budget line
     await prisma.budgetLine.update({
       where: { id },
@@ -41,6 +69,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         ...(period !== undefined && { period }),
         ...(amount !== undefined && { amount: parseFloat(amount) }),
         ...(rollover !== undefined && { rollover }),
+        // Allow setting categoryId to null explicitly
+        ...(hasCategoryId && { categoryId: nextCategoryId }),
+        ...(nextOrder !== undefined && { order: nextOrder }),
       },
     });
 
@@ -67,7 +98,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     });
 
     return NextResponse.json({
-      ...result,
+      id: result?.id,
+      name: result?.name,
+      period: result?.period,
+      amount: result?.amount,
+      rollover: result?.rollover,
+      order: result?.order,
+      categoryId: result?.categoryId,
       tags: result?.tags.map((blt) => blt.tag) ?? [],
     });
   } catch {
