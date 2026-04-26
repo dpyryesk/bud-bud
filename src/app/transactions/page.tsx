@@ -18,10 +18,20 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { TagBadge } from '@/components/tags/tag-badge';
 import { formatCurrency } from '@/lib/date-utils';
+import { buildTagsInDisplayOrder, type TagWithLevel } from '@/lib/tag-tree';
 import { cn } from '@/lib/utils';
 import type { TransactionWithTags } from '@/types';
 
-type TagOption = { id: string; name: string; color: string; isSource: boolean };
+type TagOption = {
+  id: string;
+  name: string;
+  color: string;
+  isSource: boolean;
+  parentId: string | null;
+  order: number;
+};
+
+type TagOptionWithLevel = TagWithLevel<TagOption>;
 
 export default function TransactionsPage() {
   const { period } = useTimePeriod();
@@ -29,7 +39,7 @@ export default function TransactionsPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [tags, setTags] = useState<TagOption[]>([]);
+  const [tags, setTags] = useState<TagOptionWithLevel[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [untaggedOnly, setUntaggedOnly] = useState(false);
@@ -77,7 +87,8 @@ export default function TransactionsPage() {
   const fetchTags = useCallback(async () => {
     const res = await fetch('/api/tags');
     const data = await res.json();
-    setTags(data.filter((t: TagOption) => !t.isSource));
+    const categoryTags = data.filter((t: TagOption) => !t.isSource);
+    setTags(buildTagsInDisplayOrder(categoryTags));
   }, []);
 
   useEffect(() => {
@@ -287,7 +298,7 @@ function TransactionRow({
   onUpdateNotes,
 }: {
   transaction: TransactionWithTags;
-  availableTags: TagOption[];
+  availableTags: TagOptionWithLevel[];
   onSetTags: (
     id: string,
     tagIds: string[],
@@ -374,7 +385,7 @@ function TransactionRow({
               key={t.id}
               name={t.name}
               color={t.color}
-              onRemove={() => toggleTag(t.id)}
+              onRemoveAction={() => toggleTag(t.id)}
               className="text-xs"
             />
           ))}
@@ -410,7 +421,9 @@ function TransactionRow({
                           className="h-3 w-3 shrink-0 rounded-full"
                           style={{ backgroundColor: tag.color }}
                         />
-                        <span className="truncate">{tag.name}</span>
+                        <span className="truncate" style={{ marginLeft: `${tag.level * 14}px` }}>
+                          {tag.name}
+                        </span>
                         {isSelected && <span className="ml-auto text-xs opacity-70">✓</span>}
                       </button>
                     );

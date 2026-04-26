@@ -30,6 +30,7 @@ model Tag {
   name         String
   color        String           @default("#6B7280")
   isSource     Boolean          @default(false)
+  order        Int              @default(0)
   parentId     String?
   parent       Tag?             @relation("TagHierarchy", fields: [parentId], references: [id])
   children     Tag[]            @relation("TagHierarchy")

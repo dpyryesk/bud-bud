@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
+import { buildTagsInDisplayOrder, type TagWithLevel } from '@/lib/tag-tree';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -19,11 +20,20 @@ const NAV_ITEMS = [
   { href: '/budget', label: 'Budget', icon: PiggyBank },
 ] as const;
 
-type SimpleTag = { id: string; name: string; color: string };
+type SimpleTag = {
+  id: string;
+  name: string;
+  color: string;
+  isSource: boolean;
+  parentId: string | null;
+  order: number;
+};
+
+type LeveledTag = TagWithLevel<SimpleTag>;
 
 function NewAutoTagRuleButton() {
   const [open, setOpen] = useState(false);
-  const [tags, setTags] = useState<SimpleTag[]>([]);
+  const [tags, setTags] = useState<LeveledTag[]>([]);
   const [pattern, setPattern] = useState('');
   const [matchType, setMatchType] = useState<'exact' | 'regex'>('exact');
   const [tagId, setTagId] = useState('');
@@ -35,7 +45,8 @@ function NewAutoTagRuleButton() {
     try {
       const res = await fetch('/api/tags');
       const data: SimpleTag[] = await res.json();
-      setTags(data.sort((a, b) => a.name.localeCompare(b.name)));
+      const categoryTags = data.filter((tag) => !tag.isSource);
+      setTags(buildTagsInDisplayOrder(categoryTags));
     } catch {
       // silently ignore; user will see empty tag list
     }
@@ -200,7 +211,7 @@ function NewAutoTagRuleButton() {
                           className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full"
                           style={{ backgroundColor: t.color }}
                         />
-                        {t.name}
+                        <span style={{ marginLeft: `${t.level * 14}px` }}>{t.name}</span>
                       </SelectItem>
                     ))
                   )}

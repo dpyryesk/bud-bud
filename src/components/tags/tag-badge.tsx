@@ -7,10 +7,10 @@ type TagBadgeProps = {
   color: string;
   isSource?: boolean;
   className?: string;
-  onRemove?: () => void;
+  onRemoveAction?: () => void;
 };
 
-export function TagBadge({ name, color, isSource, className, onRemove }: TagBadgeProps) {
+export function TagBadge({ name, color, isSource, className, onRemoveAction }: TagBadgeProps) {
   return (
     <Badge
       variant="outline"
@@ -21,10 +21,10 @@ export function TagBadge({ name, color, isSource, className, onRemove }: TagBadg
         color: color,
       }}
     >
-      {isSource && '📌 '}
+      {isSource && '💳 '}
       {name}
-      {onRemove && (
-        <button onClick={onRemove} className="ml-1 hover:opacity-70">
+      {onRemoveAction && (
+        <button onClick={onRemoveAction} className="ml-1 hover:opacity-70">
           ×
         </button>
       )}

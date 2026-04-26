@@ -1,7 +1,31 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, FolderPlus, X, Zap } from 'lucide-react';
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  ChevronRight,
+  ChevronDown,
+  FolderPlus,
+  Zap,
+  GripVertical,
+} from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +40,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/u
 import { Separator } from '@/components/ui/separator';
 import { TagBadge } from '@/components/tags/tag-badge';
 import { Badge } from '@/components/ui/badge';
+import {
+  buildTagTree,
+  flattenTagTreeWithLevel,
+  type TagNode,
+  type TagWithLevel,
+} from '@/lib/tag-tree';
 
 // ---- Types ----
 
@@ -25,10 +55,12 @@ type Tag = {
   color: string;
   isSource: boolean;
   parentId: string | null;
+  order: number;
   children: { id: string }[];
 };
 
-type TagTree = Tag & { childrenFull: TagTree[] };
+type TagTree = TagNode<Tag>;
+type LeveledTag = TagWithLevel<Tag>;
 
 type AutoTagRule = {
   id: string;
@@ -40,29 +72,6 @@ type AutoTagRule = {
 };
 
 // ---- Tree helpers ----
-
-/** Build a recursive tree from a flat list. Orphaned tags (unknown parentId) become roots. */
-function buildTree(tags: Tag[]): TagTree[] {
-  const tagMap = new Map<string, TagTree>();
-  tags.forEach((t) => tagMap.set(t.id, { ...t, childrenFull: [] }));
-
-  const roots: TagTree[] = [];
-  tagMap.forEach((t) => {
-    if (t.parentId && tagMap.has(t.parentId)) {
-      tagMap.get(t.parentId)!.childrenFull.push(t);
-    } else {
-      roots.push(t);
-    }
-  });
-
-  const sortLevel = (nodes: TagTree[]): TagTree[] => {
-    nodes.sort((a, b) => a.name.localeCompare(b.name));
-    nodes.forEach((n) => sortLevel(n.childrenFull));
-    return nodes;
-  };
-
-  return sortLevel(roots);
-}
 
 /** Recursively search all nodes in the tree for a specific id. */
 function findInTree(nodes: TagTree[], id: string): TagTree | null {
@@ -109,30 +118,52 @@ const PRESET_COLORS = [
   '#78716C',
 ];
 
-// ---- Sub-components ----
+// ---- Sortable tag row ----
 
-function TagTreeNode({
+function SortableTagRow({
   tag,
+  level,
   onEdit,
   onAddChild,
   onDelete,
-  level = 0,
+  onReorder,
 }: {
   tag: TagTree;
+  level: number;
   onEdit: (tag: Tag) => void;
   onAddChild: (parentTag: Tag) => void;
   onDelete: (id: string) => void;
-  level?: number;
+  onReorder: (parentId: string | null, orderedIds: string[]) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = tag.childrenFull.length > 0;
 
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: tag.id,
+  });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
   return (
-    <div>
+    <div ref={setNodeRef} style={style}>
       <div
         className="group hover:bg-muted flex items-center gap-2 rounded-md px-2 py-1.5"
         style={{ paddingLeft: `${level * 20 + 8}px` }}
       >
+        {/* Drag handle */}
+        <button
+          className="text-muted-foreground cursor-grab touch-none opacity-0 group-hover:opacity-100 active:cursor-grabbing"
+          aria-label="Drag to reorder"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+
         {hasChildren ? (
           <button
             onClick={() => setExpanded(!expanded)}
@@ -184,25 +215,79 @@ function TagTreeNode({
         </div>
       </div>
 
-      {expanded &&
-        hasChildren &&
-        tag.childrenFull.map((child) => (
-          <TagTreeNode
-            key={child.id}
-            tag={child}
+      {expanded && hasChildren && (
+        <SortableSiblingList
+          tags={tag.childrenFull}
+          parentId={tag.id}
+          level={level + 1}
+          onEdit={onEdit}
+          onAddChild={onAddChild}
+          onDelete={onDelete}
+          onReorder={onReorder}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---- Sortable sibling list (one DndContext per sibling group) ----
+
+function SortableSiblingList({
+  tags,
+  parentId,
+  level,
+  onEdit,
+  onAddChild,
+  onDelete,
+  onReorder,
+}: {
+  tags: TagTree[];
+  parentId: string | null;
+  level: number;
+  onEdit: (tag: Tag) => void;
+  onAddChild: (parentTag: Tag) => void;
+  onDelete: (id: string) => void;
+  onReorder: (parentId: string | null, orderedIds: string[]) => void;
+}) {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = tags.findIndex((t) => t.id === active.id);
+    const newIndex = tags.findIndex((t) => t.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(tags, oldIndex, newIndex);
+    onReorder(
+      parentId,
+      reordered.map((t) => t.id),
+    );
+  }
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={tags.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+        {tags.map((tag) => (
+          <SortableTagRow
+            key={tag.id}
+            tag={tag}
+            level={level}
             onEdit={onEdit}
             onAddChild={onAddChild}
             onDelete={onDelete}
-            level={level + 1}
+            onReorder={onReorder}
           />
         ))}
-    </div>
+      </SortableContext>
+    </DndContext>
   );
 }
 
 // ---- Auto-tag rules section ----
 
-function AutoTagRulesSection({ categoryTags }: { categoryTags: Tag[] }) {
+function AutoTagRulesSection({ categoryTags }: { categoryTags: LeveledTag[] }) {
   const [rules, setRules] = useState<AutoTagRule[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formPattern, setFormPattern] = useState('');
@@ -403,18 +488,15 @@ function AutoTagRulesSection({ categoryTags }: { categoryTags: Tag[] }) {
                         No category tags yet
                       </div>
                     ) : (
-                      categoryTags
-                        .slice()
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((t) => (
-                          <SelectItem key={t.id} value={t.id}>
-                            <span
-                              className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full"
-                              style={{ backgroundColor: t.color }}
-                            />
-                            {t.name}
-                          </SelectItem>
-                        ))
+                      categoryTags.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          <span
+                            className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: t.color }}
+                          />
+                          <span style={{ marginLeft: `${t.level * 14}px` }}>{t.name}</span>
+                        </SelectItem>
+                      ))
                     )}
                   </SelectContent>
                 </Select>
@@ -603,14 +685,47 @@ export default function TagsPage() {
     }
   }, [editingTag, fetchTags, formColor, formIsSource, formName, formParentId, resetForm]);
 
+  /** Optimistically reorder siblings and persist to DB. */
+  const handleReorder = useCallback(
+    async (parentId: string | null, orderedIds: string[]) => {
+      // Optimistic update: assign new order values to the reordered siblings
+      setTags((prev) =>
+        prev.map((tag) => {
+          const newOrder = orderedIds.indexOf(tag.id);
+          return newOrder !== -1 ? { ...tag, order: newOrder } : tag;
+        }),
+      );
+
+      try {
+        const res = await fetch('/api/tags/reorder', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            parentId,
+            updates: orderedIds.map((id, idx) => ({ id, order: idx })),
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error('Failed to persist reorder');
+        }
+      } catch {
+        // Re-fetch from DB to avoid stale rollback snapshots when drags overlap.
+        await fetchTags();
+      }
+    },
+    [fetchTags],
+  );
+
   const categoryTags = tags.filter((t) => !t.isSource);
   const sourceTags = tags.filter((t) => t.isSource);
-  const categoryTree = buildTree(categoryTags);
-  const sourceTree = buildTree(sourceTags);
+  const categoryTree = buildTagTree(categoryTags);
+  const sourceTree = buildTagTree(sourceTags);
+  const categoryTagsInDisplayOrder = flattenTagTreeWithLevel(categoryTree);
 
   // For the parent dropdown: exclude the tag being edited and all its descendants
   // (would create a cycle) and only show tags of the same isSource type.
-  const allTree = buildTree(tags);
+  const allTree = buildTagTree(tags);
   const editingTagTree = editingTag ? findInTree(allTree, editingTag.id) : null;
   const excludedIds: Set<string> = editingTagTree
     ? new Set([editingTag!.id, ...collectDescendantIds(editingTagTree)])
@@ -664,118 +779,101 @@ export default function TagsPage() {
                 />
               </div>
 
-              {/* Color picker */}
+              {/* Color */}
               <div className="space-y-1">
                 <Label>Color</Label>
                 <div className="flex flex-wrap gap-2">
                   {PRESET_COLORS.map((c) => (
                     <button
                       key={c}
-                      className="h-7 w-7 rounded-full border-2 transition-transform hover:scale-110"
+                      type="button"
+                      className="h-6 w-6 rounded-full border-2 transition-transform hover:scale-110"
                       style={{
                         backgroundColor: c,
-                        borderColor: formColor === c ? 'var(--foreground)' : 'transparent',
-                        boxShadow: formColor === c ? '0 0 0 2px var(--background)' : 'none',
+                        borderColor: formColor === c ? 'white' : 'transparent',
+                        boxShadow: formColor === c ? `0 0 0 2px ${c}` : undefined,
                       }}
-                      title={c}
                       onClick={() => setFormColor(c)}
-                      type="button"
+                      aria-label={c}
                     />
                   ))}
                 </div>
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    type="color"
+                <div className="flex items-center gap-2 pt-1">
+                  <span
+                    className="h-5 w-5 flex-none rounded-full border"
+                    style={{ backgroundColor: formColor }}
+                  />
+                  <Input
                     value={formColor}
                     onChange={(e) => setFormColor(e.target.value)}
-                    className="h-8 w-10 cursor-pointer rounded border"
-                    title="Custom colour"
-                  />
-                  <span className="text-muted-foreground font-mono text-xs">{formColor}</span>
-                  <TagBadge
-                    name={formName || 'Preview'}
-                    color={formColor}
-                    isSource={formIsSource}
+                    placeholder="#3B82F6"
+                    className="font-mono text-xs"
                   />
                 </div>
               </div>
 
-              {/* Source flag */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="is-source"
-                  checked={formIsSource}
-                  onChange={(e) => {
-                    setFormIsSource(e.target.checked);
-                    // Reset parent when toggling type to avoid type mismatch
-                    setFormParentId(null);
-                  }}
-                  className="rounded"
-                />
-                <Label htmlFor="is-source" className="cursor-pointer font-normal">
-                  Source tag{' '}
-                  <span className="text-muted-foreground text-xs">
-                    (account / card identifier, excluded from budget)
-                  </span>
-                </Label>
-              </div>
+              {/* Type (isSource) */}
+              {!editingTag && (
+                <div className="space-y-1">
+                  <Label>Type</Label>
+                  <Select
+                    value={formIsSource ? 'source' : 'category'}
+                    onValueChange={(v) => {
+                      setFormIsSource(v === 'source');
+                      setFormParentId(null);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <span className="text-sm capitalize">
+                        {formIsSource ? 'Source' : 'Category'}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="category">Category</SelectItem>
+                      <SelectItem value="source">Source</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-muted-foreground text-xs">
+                    {formIsSource
+                      ? 'Source tags identify which account or card a transaction came from. They are excluded from budget calculations.'
+                      : 'Category tags organise your spending. They are used in budget calculations.'}
+                  </p>
+                </div>
+              )}
 
               {/* Parent tag */}
               <div className="space-y-1">
                 <Label>Parent Tag</Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={formParentId ?? ''}
-                    onValueChange={(v) => setFormParentId(v || null)}
-                  >
-                    <SelectTrigger className="flex-1">
-                      {/* Render the selected parent name manually.
-                          base-ui Select.Value resolves ItemText lazily (only after
-                          the popup has been opened), so pre-set values would show
-                          the raw ID string. We bypass it with our own display. */}
-                      {selectedParentTag ? (
-                        <span className="flex items-center gap-1.5 text-sm">
-                          <span
-                            className="inline-block h-2.5 w-2.5 flex-none rounded-full"
-                            style={{ backgroundColor: selectedParentTag.color }}
-                          />
-                          {selectedParentTag.name}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">None (root level)</span>
-                      )}
-                    </SelectTrigger>
-                    <SelectContent>
-                      {parentOptions.length === 0 ? (
-                        <div className="text-muted-foreground px-2 py-1.5 text-xs">
-                          No available parent tags
-                        </div>
-                      ) : (
-                        parentOptions.map((t) => (
-                          <SelectItem key={t.id} value={t.id}>
-                            <span
-                              className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full"
-                              style={{ backgroundColor: t.color }}
-                            />
-                            {t.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {formParentId && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0"
-                      title="Clear parent"
-                      onClick={() => setFormParentId(null)}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
+                <Select
+                  value={formParentId ?? 'none'}
+                  onValueChange={(v) => setFormParentId(v === 'none' ? null : v)}
+                >
+                  <SelectTrigger>
+                    {selectedParentTag ? (
+                      <span className="flex items-center gap-1.5 text-sm">
+                        <span
+                          className="inline-block h-2.5 w-2.5 flex-none rounded-full"
+                          style={{ backgroundColor: selectedParentTag.color }}
+                        />
+                        {selectedParentTag.name}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">None (root level)</span>
+                    )}
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (root level)</SelectItem>
+                    {parentOptions.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        <span
+                          className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: t.color }}
+                        />
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {selectedParentTag && (
                   <p className="text-muted-foreground text-xs">
                     Will be nested under{' '}
@@ -825,15 +923,15 @@ export default function TagsPage() {
             </p>
           ) : (
             <div className="rounded-md border">
-              {categoryTree.map((tag) => (
-                <TagTreeNode
-                  key={tag.id}
-                  tag={tag}
-                  onEdit={handleEdit}
-                  onAddChild={handleAddChild}
-                  onDelete={handleDelete}
-                />
-              ))}
+              <SortableSiblingList
+                tags={categoryTree}
+                parentId={null}
+                level={0}
+                onEdit={handleEdit}
+                onAddChild={handleAddChild}
+                onDelete={handleDelete}
+                onReorder={handleReorder}
+              />
             </div>
           )}
         </div>
@@ -854,15 +952,15 @@ export default function TagsPage() {
             </p>
           ) : (
             <div className="rounded-md border">
-              {sourceTree.map((tag) => (
-                <TagTreeNode
-                  key={tag.id}
-                  tag={tag}
-                  onEdit={handleEdit}
-                  onAddChild={handleAddChild}
-                  onDelete={handleDelete}
-                />
-              ))}
+              <SortableSiblingList
+                tags={sourceTree}
+                parentId={null}
+                level={0}
+                onEdit={handleEdit}
+                onAddChild={handleAddChild}
+                onDelete={handleDelete}
+                onReorder={handleReorder}
+              />
             </div>
           )}
         </div>
@@ -870,7 +968,7 @@ export default function TagsPage() {
         <Separator />
 
         {/* Auto-Tag Rules */}
-        <AutoTagRulesSection categoryTags={categoryTags} />
+        <AutoTagRulesSection categoryTags={categoryTagsInDisplayOrder} />
       </div>
     </div>
   );

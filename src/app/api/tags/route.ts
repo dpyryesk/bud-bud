@@ -9,7 +9,7 @@ export async function GET() {
         select: { id: true },
       },
     },
-    orderBy: { name: 'asc' },
+    orderBy: [{ order: 'asc' }, { name: 'asc' }],
   });
 
   return NextResponse.json(tags);
@@ -24,12 +24,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Name is required' }, { status: 400 });
   }
 
+  // Place new tag at the end of its sibling group
+  const maxOrderResult = await prisma.tag.aggregate({
+    where: { parentId: parentId || null },
+    _max: { order: true },
+  });
+  const order = (maxOrderResult._max.order ?? -1) + 1;
+
   const tag = await prisma.tag.create({
     data: {
       name: name.trim(),
       color: color || '#6B7280',
       parentId: parentId || null,
       isSource: isSource || false,
+      order,
     },
   });
 

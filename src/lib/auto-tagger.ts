@@ -10,7 +10,7 @@ export type AutoTagResult = {
  * Run the auto-tagging engine on untagged transactions.
  *
  * Strategies applied in order for each transaction:
- * 1. Normalized-name match — copy non-source tags from a previously-tagged
+ * 1. Normalized-name match — copy non-source tags from a previously tagged
  *    transaction with the same normalizedName.
  * 2. AutoTagRule patterns — check exact/regex rules stored in the database.
  * 3. Unmatched — transaction remains untagged.
@@ -67,38 +67,39 @@ export async function runAutoTag(start?: Date, end?: Date): Promise<AutoTagResul
 
   for (const transaction of untaggedTransactions) {
     // --- Strategy 1: Normalized-name lookup ---
-    const existingTagged = await prisma.transaction.findFirst({
-      where: {
-        normalizedName: transaction.normalizedName,
-        id: { not: transaction.id },
-        tags: {
-          some: { tag: { isSource: false } },
-        },
-      },
-      select: {
-        tags: {
-          where: { tag: { isSource: false } },
-          select: { tagId: true },
-        },
-      },
-    });
-
-    if (existingTagged && existingTagged.tags.length > 0) {
-      for (const tt of existingTagged.tags) {
-        await prisma.transactionTag.upsert({
-          where: {
-            transactionId_tagId: {
-              transactionId: transaction.id,
-              tagId: tt.tagId,
-            },
-          },
-          create: { transactionId: transaction.id, tagId: tt.tagId },
-          update: {},
-        });
-      }
-      tagged++;
-      continue;
-    }
+    // NOTE: Skipped for now
+    // const existingTagged = await prisma.transaction.findFirst({
+    //   where: {
+    //     normalizedName: transaction.normalizedName,
+    //     id: { not: transaction.id },
+    //     tags: {
+    //       some: { tag: { isSource: false } },
+    //     },
+    //   },
+    //   select: {
+    //     tags: {
+    //       where: { tag: { isSource: false } },
+    //       select: { tagId: true },
+    //     },
+    //   },
+    // });
+    //
+    // if (existingTagged && existingTagged.tags.length > 0) {
+    //   for (const tt of existingTagged.tags) {
+    //     await prisma.transactionTag.upsert({
+    //       where: {
+    //         transactionId_tagId: {
+    //           transactionId: transaction.id,
+    //           tagId: tt.tagId,
+    //         },
+    //       },
+    //       create: { transactionId: transaction.id, tagId: tt.tagId },
+    //       update: {},
+    //     });
+    //   }
+    //   tagged++;
+    //   continue;
+    // }
 
     // --- Strategy 2: AutoTagRule patterns ---
     let ruleMatched = false;

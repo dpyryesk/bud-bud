@@ -5,6 +5,7 @@
 [x] Install and configure shadcn/ui components
 [x] Build layout, navigation, and global time period selector with context
 [x] Build tag management — CRUD API + tree UI + color picker + source tag support
+[x] Tag drag-and-drop reordering — `order` field in DB, PATCH /api/tags/reorder endpoint, @dnd-kit sortable handles per sibling group, optimistic UI updates, order preserved in all dropdowns
 [x] Build CSV import — mapping config, parser, duplicate detection, source tag assignment, preview
 [x] Build auto-tagging — engine, rule management, exact-match lookup, regex matching
 [x] Build transactions view — table, period filtering, tag assignment, notes, auto-tag button
