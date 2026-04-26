@@ -6,15 +6,17 @@ interface BudgetSummaryCardsProps {
   totalBudget: number;
   totalActual: number;
   totalRemaining: number;
+  totalUntracked: number;
 }
 
 export function BudgetSummaryCards({
   totalBudget,
   totalActual,
   totalRemaining,
+  totalUntracked,
 }: BudgetSummaryCardsProps) {
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Total Budget</CardTitle>
@@ -44,6 +46,17 @@ export function BudgetSummaryCards({
           >
             {formatCurrency(totalRemaining)}
           </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium">Untracked Spending</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className={cn('text-2xl font-bold', totalUntracked > 0 ? 'text-amber-600' : '')}>
+            {formatCurrency(totalUntracked)}
+          </div>
+          <p className="text-muted-foreground mt-1 text-xs">No budget line assigned</p>
         </CardContent>
       </Card>
     </div>

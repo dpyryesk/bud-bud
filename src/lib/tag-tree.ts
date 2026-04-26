@@ -49,3 +49,27 @@ export function flattenTagTreeWithLevel<T extends TagLike>(
 export function buildTagsInDisplayOrder<T extends TagLike>(tags: T[]): TagWithLevel<T>[] {
   return flattenTagTreeWithLevel(buildTagTree(tags));
 }
+
+/**
+ * Recursively collect all descendant tag IDs for a given set of tag IDs.
+ */
+export function collectDescendantTagIds(
+  tagIds: string[],
+  childrenMap: Map<string, string[]>,
+): Set<string> {
+  const allIds = new Set(tagIds);
+  const queue = [...tagIds];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    const children = childrenMap.get(currentId) ?? [];
+    for (const childId of children) {
+      if (!allIds.has(childId)) {
+        allIds.add(childId);
+        queue.push(childId);
+      }
+    }
+  }
+
+  return allIds;
+}

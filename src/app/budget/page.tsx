@@ -21,7 +21,9 @@ import { UncategorizedSection } from '@/components/budget/uncategorized-section'
 import { BudgetLineDialog } from '@/components/budget/budget-line-dialog';
 import { BudgetCategoryDialog } from '@/components/budget/budget-category-dialog';
 import { BudgetSummaryCards } from '@/components/budget/budget-summary-cards';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { BudgetSummaryLine, BudgetCategory } from '@/types';
+import { TransactionsTable } from '@/components/transactions/transactions-table';
 
 export default function BudgetPage() {
   const { period } = useTimePeriod();
@@ -31,6 +33,9 @@ export default function BudgetPage() {
   const [tags, setTags] = useState<TagOptionWithLevel[]>([]);
   const [loading, setLoading] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
+
+  // Untracked spending
+  const [totalUntracked, setTotalUntracked] = useState(0);
 
   // Ordered display state (managed locally for drag-and-drop)
   const [orderedCategories, setOrderedCategories] = useState<BudgetCategory[]>([]);
@@ -67,6 +72,16 @@ export default function BudgetPage() {
     return data;
   }, [period]);
 
+  const fetchUntracked = useCallback(async () => {
+    const params = new URLSearchParams({
+      start: period.start.toISOString(),
+      end: period.end.toISOString(),
+    });
+    const res = await fetch(`/api/budget/untracked?${params}`);
+    const data: { totalUntracked: number } = await res.json();
+    setTotalUntracked(data.totalUntracked);
+  }, [period]);
+
   const fetchTags = useCallback(async () => {
     const res = await fetch('/api/tags');
     const data = await res.json();
@@ -75,6 +90,7 @@ export default function BudgetPage() {
   }, []);
 
   const refresh = useCallback(async () => {
+    void fetchUntracked();
     const [cats, lines] = await Promise.all([fetchCategories(), fetchSummary()]);
     setOrderedCategories(cats);
     const grouped: Record<string, BudgetSummaryLine[]> = {};
@@ -89,7 +105,7 @@ export default function BudgetPage() {
         .filter((l) => l.budgetLine.categoryId === null)
         .sort((a, b) => a.budgetLine.order - b.budgetLine.order),
     );
-  }, [fetchCategories, fetchSummary]);
+  }, [fetchCategories, fetchSummary, fetchUntracked]);
 
   const parseErrorMessage = useCallback(async (res: Response) => {
     try {
@@ -351,6 +367,7 @@ export default function BudgetPage() {
         totalBudget={totalBudget}
         totalActual={totalActual}
         totalRemaining={totalRemaining}
+        totalUntracked={totalUntracked}
       />
 
       {/* Budget Lines Table */}
@@ -420,6 +437,19 @@ export default function BudgetPage() {
           </DndContext>
         )}
       </div>
+
+      {/* Untracked Transactions */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-semibold">Untracked Transactions</CardTitle>
+          <p className="text-muted-foreground text-sm">
+            Debit transactions with no tag or with a tag not assigned to any budget line.
+          </p>
+        </CardHeader>
+        <CardContent className="p-0">
+          <TransactionsTable extraParams={{ unbudgeted: 'true' }} />
+        </CardContent>
+      </Card>
     </div>
   );
 }
