@@ -53,11 +53,6 @@ export function SortableLineRow({ line, onEdit, onDelete }: SortableLineRowProps
             🔄
           </span>
         )}
-        {line.rolloverAmount !== 0 && (
-          <div className="text-muted-foreground truncate text-xs">
-            Rollover: {formatCurrency(line.rolloverAmount)}
-          </div>
-        )}
       </div>
 
       {/* Tags */}
@@ -72,6 +67,11 @@ export function SortableLineRow({ line, onEdit, onDelete }: SortableLineRowProps
 
       {/* Budget */}
       <div className="text-right tabular-nums">{formatCurrency(line.effectiveBudget)}</div>
+
+      {/* Rollover */}
+      <div className="text-muted-foreground text-right tabular-nums">
+        {line.rolloverAmount !== 0 ? formatCurrency(line.rolloverAmount) : '—'}
+      </div>
 
       {/* Actual */}
       <div className="text-right tabular-nums">{formatCurrency(line.actualSpending)}</div>

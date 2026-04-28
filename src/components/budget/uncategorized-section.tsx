@@ -19,6 +19,7 @@ export function UncategorizedSection({
   onDeleteLine,
 }: UncategorizedSectionProps) {
   const subtotalBudget = lines.reduce((s, l) => s + l.effectiveBudget, 0);
+  const subtotalRollover = lines.reduce((s, l) => s + l.rolloverAmount, 0);
   const subtotalActual = lines.reduce((s, l) => s + l.actualSpending, 0);
   const subtotalRemaining = subtotalBudget - subtotalActual;
 
@@ -29,6 +30,9 @@ export function UncategorizedSection({
         <div /> {/* no drag handle */}
         <div className="text-muted-foreground col-span-3 text-sm">Uncategorized</div>
         <div className="text-right text-sm tabular-nums">{formatCurrency(subtotalBudget)}</div>
+        <div className="text-muted-foreground text-right text-sm tabular-nums">
+          {subtotalRollover !== 0 ? formatCurrency(subtotalRollover) : '—'}
+        </div>
         <div className="text-right text-sm tabular-nums">{formatCurrency(subtotalActual)}</div>
         <div
           className={cn(

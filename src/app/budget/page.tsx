@@ -384,6 +384,7 @@ export default function BudgetPage() {
           <div>Tags</div>
           <div>Period</div>
           <div className="text-right">Budget</div>
+          <div className="text-right">Rollover</div>
           <div className="text-right">Actual</div>
           <div className="text-right">Remaining</div>
           <div />
@@ -393,7 +394,7 @@ export default function BudgetPage() {
           /* Loading skeleton */
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className={cn(ROW_GRID, 'border-b px-3 py-2 last:border-b-0')}>
-              {Array.from({ length: 8 }).map((__, j) => (
+              {Array.from({ length: 9 }).map((__, j) => (
                 <div key={j} className="bg-muted h-4 animate-pulse rounded" />
               ))}
             </div>
