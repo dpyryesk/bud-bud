@@ -3,7 +3,15 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ArrowLeftRight, Tags, Upload, PiggyBank, Plus } from 'lucide-react';
+import {
+  LayoutDashboard,
+  ArrowLeftRight,
+  Tags,
+  Upload,
+  PiggyBank,
+  CalendarRange,
+  Plus,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +26,7 @@ const NAV_ITEMS = [
   { href: '/tags', label: 'Tags', icon: Tags },
   { href: '/import', label: 'Import', icon: Upload },
   { href: '/budget', label: 'Budget', icon: PiggyBank },
+  { href: '/budgets', label: 'Budgets', icon: CalendarRange },
 ] as const;
 
 type SimpleTag = {

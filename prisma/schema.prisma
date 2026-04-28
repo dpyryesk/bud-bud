@@ -52,10 +52,22 @@ model TransactionTag {
   @@unique([transactionId, tagId])
 }
 
+model Budget {
+  id             String           @id @default(cuid())
+  startDate      DateTime         @unique
+  resetRollover  Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  categories     BudgetCategory[]
+  lines          BudgetLine[]
+}
+
 model BudgetCategory {
   id          String       @id @default(cuid())
   name        String
   order       Int          @default(0)
+  budgetId    String
+  budget      Budget       @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   budgetLines BudgetLine[]
@@ -68,6 +80,8 @@ model BudgetLine {
   amount     Float
   rollover   Boolean         @default(false)
   order      Int             @default(0)
+  budgetId   String
+  budget     Budget          @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   categoryId String?
   category   BudgetCategory? @relation(fields: [categoryId], references: [id])
   createdAt  DateTime        @default(now())

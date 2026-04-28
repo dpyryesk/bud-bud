@@ -5,6 +5,7 @@ import { FolderPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Dialog,
   DialogContent,
@@ -15,28 +16,52 @@ import {
 import type { BudgetCategory } from '@/types';
 
 interface BudgetCategoryDialogProps {
+  budgetId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  triggerDisabled?: boolean;
+  triggerTooltip?: string;
   /** null → create mode; non-null → edit mode */
   editingCategory: BudgetCategory | null;
   onSuccess: () => Promise<void>;
 }
 
 export function BudgetCategoryDialog({
+  budgetId,
   open,
   onOpenChange,
+  triggerDisabled = false,
+  triggerTooltip = 'Create or activate a budget first',
   editingCategory,
   onSuccess,
 }: BudgetCategoryDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger render={<Button variant="outline" />}>
-        <FolderPlus className="mr-2 h-4 w-4" />
-        Add Category
-      </DialogTrigger>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <DialogTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    disabled={triggerDisabled}
+                    aria-disabled={triggerDisabled}
+                  />
+                }
+              />
+            }
+          >
+            <FolderPlus className="mr-2 h-4 w-4" />
+            Add Category
+          </TooltipTrigger>
+          {triggerDisabled && <TooltipContent>{triggerTooltip}</TooltipContent>}
+        </Tooltip>
+      </TooltipProvider>
       {open && (
         <BudgetCategoryDialogContent
           key={editingCategory?.id ?? 'new'}
+          budgetId={budgetId}
           editingCategory={editingCategory}
           onOpenChange={onOpenChange}
           onSuccess={onSuccess}
@@ -47,6 +72,7 @@ export function BudgetCategoryDialog({
 }
 
 function BudgetCategoryDialogContent({
+  budgetId,
   editingCategory,
   onOpenChange,
   onSuccess,
@@ -70,10 +96,14 @@ function BudgetCategoryDialogContent({
           body: JSON.stringify({ name: catFormName.trim() }),
         });
       } else {
+        if (!budgetId) {
+          setCatFormError('No active budget selected.');
+          return;
+        }
         res = await fetch('/api/budget-categories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: catFormName.trim() }),
+          body: JSON.stringify({ name: catFormName.trim(), budgetId }),
         });
       }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import {
   DndContext,
@@ -22,14 +23,16 @@ import { BudgetLineDialog } from '@/components/budget/budget-line-dialog';
 import { BudgetCategoryDialog } from '@/components/budget/budget-category-dialog';
 import { BudgetSummaryCards } from '@/components/budget/budget-summary-cards';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { BudgetSummaryLine, BudgetCategory } from '@/types';
+import type { BudgetSummaryLine, BudgetCategory, BudgetSummaryResponse, Budget } from '@/types';
 import { TransactionsTable } from '@/components/transactions/transactions-table';
+import { formatIsoDateForDisplay } from '@/lib/date-utils';
 
 export default function BudgetPage() {
   const { period } = useTimePeriod();
 
   // Raw data from API
   const [summaryLines, setSummaryLines] = useState<BudgetSummaryLine[]>([]);
+  const [activeBudget, setActiveBudget] = useState<Budget | null>(null);
   const [tags, setTags] = useState<TagOptionWithLevel[]>([]);
   const [loading, setLoading] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -53,8 +56,10 @@ export default function BudgetPage() {
 
   // ---- Data fetching ----
 
-  const fetchCategories = useCallback(async () => {
-    const res = await fetch('/api/budget-categories');
+  const fetchCategories = useCallback(async (budgetId: string | null) => {
+    if (!budgetId) return [];
+    const params = new URLSearchParams({ budgetId });
+    const res = await fetch(`/api/budget-categories?${params}`);
     const data: BudgetCategory[] = await res.json();
     return data;
   }, []);
@@ -66,8 +71,15 @@ export default function BudgetPage() {
       end: period.end.toISOString(),
     });
     const res = await fetch(`/api/budget/summary?${params}`);
-    const data: BudgetSummaryLine[] = await res.json();
-    setSummaryLines(data);
+    if (!res.ok) {
+      setSummaryLines([]);
+      setActiveBudget(null);
+      setLoading(false);
+      return { activeBudget: null, lines: [] } as BudgetSummaryResponse;
+    }
+    const data: BudgetSummaryResponse = await res.json();
+    setSummaryLines(data.lines);
+    setActiveBudget(data.activeBudget);
     setLoading(false);
     return data;
   }, [period]);
@@ -91,7 +103,9 @@ export default function BudgetPage() {
 
   const refresh = useCallback(async () => {
     void fetchUntracked();
-    const [cats, lines] = await Promise.all([fetchCategories(), fetchSummary()]);
+    const summary = await fetchSummary();
+    const lines = summary.lines;
+    const cats = await fetchCategories(summary.activeBudget?.id ?? null);
     setOrderedCategories(cats);
     const grouped: Record<string, BudgetSummaryLine[]> = {};
     for (const cat of cats) {
@@ -320,6 +334,13 @@ export default function BudgetPage() {
         <div>
           <h1 className="text-2xl font-bold">Budget</h1>
           <p className="text-muted-foreground text-sm">Viewing: {period.label}</p>
+          <p className="text-muted-foreground text-sm">
+            <Link href="/budgets" className="underline underline-offset-4 hover:no-underline">
+              {activeBudget
+                ? `Budget effective ${formatIsoDateForDisplay(activeBudget.startDate)}`
+                : 'No budget — manage budgets'}
+            </Link>
+          </p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -334,6 +355,9 @@ export default function BudgetPage() {
 
           <BudgetCategoryDialog
             open={catDialogOpen}
+            budgetId={activeBudget?.id ?? null}
+            triggerDisabled={activeBudget === null}
+            triggerTooltip="Create or activate a budget first"
             onOpenChange={(open) => {
               setCatDialogOpen(open);
               if (!open) setEditingCategory(null);
@@ -344,6 +368,9 @@ export default function BudgetPage() {
 
           <BudgetLineDialog
             open={lineDialogOpen}
+            budgetId={activeBudget?.id ?? null}
+            triggerDisabled={activeBudget === null}
+            triggerTooltip="Create or activate a budget first"
             onOpenChange={(open) => {
               setLineDialogOpen(open);
               if (!open) setEditingLine(null);

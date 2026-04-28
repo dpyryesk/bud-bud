@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Dialog,
   DialogContent,
@@ -24,8 +25,11 @@ import type { BudgetSummaryLine, BudgetCategory } from '@/types';
 import type { TagOptionWithLevel } from './constants';
 
 interface BudgetLineDialogProps {
+  budgetId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  triggerDisabled?: boolean;
+  triggerTooltip?: string;
   /** null → create mode; non-null → edit mode */
   editingLine: BudgetSummaryLine | null;
   categories: BudgetCategory[];
@@ -34,8 +38,11 @@ interface BudgetLineDialogProps {
 }
 
 export function BudgetLineDialog({
+  budgetId,
   open,
   onOpenChange,
+  triggerDisabled = false,
+  triggerTooltip = 'Create or activate a budget first',
   editingLine,
   categories,
   tags,
@@ -43,13 +50,25 @@ export function BudgetLineDialog({
 }: BudgetLineDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger render={<Button />}>
-        <Plus className="mr-2 h-4 w-4" />
-        Add Budget Line
-      </DialogTrigger>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <DialogTrigger
+                render={<Button disabled={triggerDisabled} aria-disabled={triggerDisabled} />}
+              />
+            }
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Budget Line
+          </TooltipTrigger>
+          {triggerDisabled && <TooltipContent>{triggerTooltip}</TooltipContent>}
+        </Tooltip>
+      </TooltipProvider>
       {open && (
         <BudgetLineDialogContent
           key={editingLine?.budgetLine.id ?? 'new'}
+          budgetId={budgetId}
           editingLine={editingLine}
           categories={categories}
           tags={tags}
@@ -62,6 +81,7 @@ export function BudgetLineDialog({
 }
 
 function BudgetLineDialogContent({
+  budgetId,
   editingLine,
   categories,
   tags,
@@ -116,10 +136,14 @@ function BudgetLineDialogContent({
           body: JSON.stringify(payload),
         });
       } else {
+        if (!budgetId) {
+          setFormError('No active budget selected.');
+          return;
+        }
         res = await fetch('/api/budget-lines', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, budgetId }),
         });
       }
 

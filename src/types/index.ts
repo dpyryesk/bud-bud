@@ -35,6 +35,20 @@ export type TransactionWithTags = {
 
 // ---- Budget types ----
 
+export type Budget = {
+  id: string;
+  startDate: string;
+  resetRollover: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BudgetWithMeta = Budget & {
+  categoryCount: number;
+  lineCount: number;
+  validUntil: string | null;
+};
+
 export type BudgetCategory = {
   id: string;
   name: string;
@@ -60,6 +74,11 @@ export type BudgetSummaryLine = {
   remaining: number;
   rolloverAmount: number;
   effectiveBudget: number;
+};
+
+export type BudgetSummaryResponse = {
+  activeBudget: Budget | null;
+  lines: BudgetSummaryLine[];
 };
 
 // ---- CSV Import types ----

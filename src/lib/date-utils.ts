@@ -169,3 +169,40 @@ export function formatCurrency(amount: number): string {
     currency: 'CAD',
   }).format(amount);
 }
+
+/**
+ * Parse an HTML date input value (`YYYY-MM-DD`) into a Date at UTC midnight.
+ *
+ * This avoids environment-dependent parsing behavior and keeps date-only
+ * values stable across server/client time zones.
+ */
+export function parseDateInputAsUtc(dateInput: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateInput);
+  if (!match) {
+    return new Date(dateInput);
+  }
+
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+
+  return new Date(Date.UTC(year, monthIndex, day, 0, 0, 0, 0));
+}
+
+/**
+ * Format an ISO datetime string as a local date for display, preserving the
+ * calendar day from the ISO date portion (no timezone day-shift).
+ */
+export function formatIsoDateForDisplay(iso: string, pattern = 'MMM d, yyyy'): string {
+  const datePart = iso.split('T')[0];
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
+  if (!match) {
+    return format(new Date(iso), pattern);
+  }
+
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+
+  return format(new Date(year, monthIndex, day), pattern);
+}

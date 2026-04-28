@@ -5,6 +5,7 @@ import {
   getCompletePeriodsBetween,
   type BudgetPeriodType,
 } from '@/lib/date-utils';
+import type { Budget } from '@/generated/prisma/client';
 
 /**
  * Recursively collect all descendant tag IDs for a given set of tag IDs.
@@ -31,6 +32,49 @@ function collectDescendantTagIds(
   return allIds;
 }
 
+/**
+ * Return the latest budget whose startDate <= date.
+ * Falls back to the earliest budget if none qualifies (date is before all budgets).
+ * Assumes budgets is sorted by startDate asc.
+ */
+function findApplicableBudget(budgets: Budget[], date: Date): Budget {
+  let applicable: Budget | null = null;
+  for (const budget of budgets) {
+    if (budget.startDate <= date) {
+      applicable = budget;
+    }
+  }
+  return applicable ?? budgets[0];
+}
+
+/**
+ * Walk backwards through the budget chain to find the date from which rollover
+ * history should accumulate.
+ *
+ * - If the given budget has resetRollover = true, rollover resets here →
+ *   history starts at budget.startDate.
+ * - Otherwise, find the previous budget (highest startDate < budget.startDate)
+ *   and recurse.
+ * - If there is no previous budget, history starts at the first budget's startDate.
+ *
+ * Assumes allBudgets is sorted by startDate asc.
+ */
+function findRolloverHistoryStart(budget: Budget, allBudgets: Budget[]): Date {
+  if (budget.resetRollover) {
+    return budget.startDate;
+  }
+
+  // Find the immediately preceding budget
+  const previousBudget = [...allBudgets].reverse().find((b) => b.startDate < budget.startDate);
+
+  if (!previousBudget) {
+    // No earlier budget — start from this budget's own startDate
+    return budget.startDate;
+  }
+
+  return findRolloverHistoryStart(previousBudget, allBudgets);
+}
+
 // GET /api/budget/summary - Computed budget vs actual for period
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -48,9 +92,21 @@ export async function GET(request: NextRequest) {
     type: 'custom' as const,
   };
 
+  // Load all budgets first so we can resolve which one applies to this view period
+  const allBudgets = await prisma.budget.findMany({
+    orderBy: { startDate: 'asc' },
+  });
+
+  if (allBudgets.length === 0) {
+    return NextResponse.json({ error: 'No budgets found' }, { status: 404 });
+  }
+
+  const applicableBudget = findApplicableBudget(allBudgets, viewPeriod.start);
+
   // Load all data in parallel upfront - no N+1 in the loops below
-  const [budgetLines, allTags, earliestTx, categories] = await Promise.all([
+  const [budgetLines, allTags, categories] = await Promise.all([
     prisma.budgetLine.findMany({
+      where: { budgetId: applicableBudget.id },
       include: {
         tags: {
           include: {
@@ -62,11 +118,8 @@ export async function GET(request: NextRequest) {
     }),
     // Load all tags so we can build a complete children map in memory
     prisma.tag.findMany({ select: { id: true, parentId: true } }),
-    prisma.transaction.findFirst({
-      orderBy: { date: 'asc' },
-      select: { date: true },
-    }),
     prisma.budgetCategory.findMany({
+      where: { budgetId: applicableBudget.id },
       orderBy: { order: 'asc' },
     }),
   ]);
@@ -91,13 +144,16 @@ export async function GET(request: NextRequest) {
     budgetLineTagSets.set(bl.id, collectDescendantTagIds(directTagIds, childrenMap));
   }
 
-  // Determine the full historical date range we need (for rollover budget lines)
+  // Determine the rollover history start from the budget chain
   const rolloverLines = budgetLines.filter((bl) => bl.rollover);
-  const needsHistory = rolloverLines.length > 0 && earliestTx !== null;
+  const needsHistory = rolloverLines.length > 0;
+  const rolloverHistoryStart = needsHistory
+    ? findRolloverHistoryStart(applicableBudget, allBudgets)
+    : viewPeriod.start;
 
   // Compute the earliest date we need transactions for (rollover history or view start)
-  const historyStart = needsHistory && earliestTx ? earliestTx.date : viewPeriod.start;
-  const effectiveStart = historyStart < viewPeriod.start ? historyStart : viewPeriod.start;
+  const effectiveStart =
+    rolloverHistoryStart < viewPeriod.start ? rolloverHistoryStart : viewPeriod.start;
 
   // Load ALL transactions we'll ever need in one query
   const allTransactions = await prisma.transaction.findMany({
@@ -162,8 +218,12 @@ export async function GET(request: NextRequest) {
     const actualSpending = budgetActuals.get(bl.id) ?? 0;
 
     let rolloverAmount = 0;
-    if (bl.rollover && earliestTx) {
-      const completePeriods = getCompletePeriodsBetween(period, earliestTx.date, viewPeriod.start);
+    if (bl.rollover) {
+      const completePeriods = getCompletePeriodsBetween(
+        period,
+        rolloverHistoryStart,
+        viewPeriod.start,
+      );
 
       for (const p of completePeriods) {
         const periodBudget = scaleBudgetAmount(bl.amount, period, {
@@ -206,5 +266,5 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  return NextResponse.json(summaryLines);
+  return NextResponse.json({ activeBudget: applicableBudget, lines: summaryLines });
 }

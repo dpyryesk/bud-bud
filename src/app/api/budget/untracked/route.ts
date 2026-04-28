@@ -1,6 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { collectDescendantTagIds } from '@/lib/tag-tree';
+import type { Budget } from '@/generated/prisma/client';
+
+/**
+ * Return the latest budget whose startDate <= date.
+ * Falls back to the earliest budget if none qualifies (date is before all budgets).
+ * Assumes budgets is sorted by startDate asc.
+ */
+function findApplicableBudget(budgets: Budget[], date: Date): Budget {
+  let applicable: Budget | null = null;
+  for (const budget of budgets) {
+    if (budget.startDate <= date) {
+      applicable = budget;
+    }
+  }
+  return applicable ?? budgets[0];
+}
 
 // GET /api/budget/untracked - Debit transactions not covered by any budget line
 export async function GET(request: NextRequest) {
@@ -15,9 +31,19 @@ export async function GET(request: NextRequest) {
   const periodStart = new Date(start);
   const periodEnd = new Date(end);
 
-  // Load budget lines and all tags in parallel
+  // Load all budgets to find the one applicable to this period
+  const allBudgets = await prisma.budget.findMany({ orderBy: { startDate: 'asc' } });
+
+  if (allBudgets.length === 0) {
+    return NextResponse.json({ totalUntracked: 0, transactions: [] });
+  }
+
+  const applicableBudget = findApplicableBudget(allBudgets, periodStart);
+
+  // Load budget lines (scoped to applicable budget) and all tags in parallel
   const [budgetLines, allTags] = await Promise.all([
     prisma.budgetLine.findMany({
+      where: { budgetId: applicableBudget.id },
       include: {
         tags: {
           include: {
