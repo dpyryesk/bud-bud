@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { Wand2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,6 +12,7 @@ import { formatCurrency } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
 import type { TransactionWithTags } from '@/types';
 import type { TagOptionWithLevel } from './constants';
+import { AutoTagRuleSheet } from './auto-tag-rule-sheet';
 
 interface TransactionRowProps {
   transaction: TransactionWithTags;
@@ -21,6 +23,7 @@ interface TransactionRowProps {
     previousTags: TransactionWithTags['tags'],
   ) => Promise<TransactionWithTags['tags']>;
   onUpdateNotes: (id: string, notes: string) => void;
+  onRuleCreated: () => void;
 }
 
 export function TransactionRow({
@@ -28,9 +31,11 @@ export function TransactionRow({
   availableTags,
   onSetTags,
   onUpdateNotes,
+  onRuleCreated,
 }: TransactionRowProps) {
   const [localTags, setLocalTags] = useState(transaction.tags);
   const [localNotes, setLocalNotes] = useState(transaction.notes ?? '');
+  const [ruleSheetOpen, setRuleSheetOpen] = useState(false);
   const tagRequestSeqRef = useRef(0);
 
   const nonSourceTags = localTags.filter((t) => !t.isSource);
@@ -75,6 +80,16 @@ export function TransactionRow({
             ))}
           </div>
         )}
+        <div className="mt-2">
+          <button
+            type="button"
+            className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), 'h-6 px-1.5 text-xs')}
+            onClick={() => setRuleSheetOpen(true)}
+          >
+            <Wand2 className="mr-1 h-3 w-3" />
+            Create auto-tag rule
+          </button>
+        </div>
       </TableCell>
 
       {/* Debit */}
@@ -177,6 +192,14 @@ export function TransactionRow({
           </PopoverContent>
         </Popover>
       </TableCell>
+
+      <AutoTagRuleSheet
+        open={ruleSheetOpen}
+        onOpenChange={setRuleSheetOpen}
+        transaction={transaction}
+        availableTags={availableTags}
+        onRuleCreated={onRuleCreated}
+      />
     </TableRow>
   );
 }

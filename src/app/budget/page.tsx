@@ -35,6 +35,7 @@ export default function BudgetPage() {
   const [activeBudget, setActiveBudget] = useState<Budget | null>(null);
   const [tags, setTags] = useState<TagOptionWithLevel[]>([]);
   const [loading, setLoading] = useState(false);
+  const [importingTags, setImportingTags] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
   // Untracked spending
@@ -314,6 +315,127 @@ export default function BudgetPage() {
     await refresh();
   };
 
+  const handleImportTags = useCallback(async () => {
+    if (!activeBudget) return;
+
+    setImportingTags(true);
+    setMutationError(null);
+
+    const normalizeName = (name: string) => name.trim().toLocaleLowerCase();
+
+    const existingNames = new Set<string>([
+      ...orderedCategories.map((c) => normalizeName(c.name)),
+      ...summaryLines.map((l) => normalizeName(l.budgetLine.name)),
+    ]);
+
+    const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
+    const childrenByParentId = new Map<string, TagOptionWithLevel[]>();
+
+    for (const tag of tags) {
+      if (!tag.parentId) continue;
+      const existing = childrenByParentId.get(tag.parentId) ?? [];
+      existing.push(tag);
+      childrenByParentId.set(tag.parentId, existing);
+    }
+
+    try {
+      const categoryIdByTagId = new Map<string, string>();
+      const categoryIdByNormalizedName = new Map<string, string>(
+        orderedCategories.map((category) => [normalizeName(category.name), category.id]),
+      );
+
+      for (const tag of tags) {
+        if (tag.level >= 2) continue;
+
+        const children = (childrenByParentId.get(tag.id) ?? []).filter((child) => child.level <= 1);
+        const hasChildren = children.length > 0;
+        if (!hasChildren) continue;
+
+        const normalizedTagName = normalizeName(tag.name);
+        if (existingNames.has(normalizedTagName)) {
+          const existingCategoryId = categoryIdByNormalizedName.get(normalizedTagName);
+          if (existingCategoryId) {
+            categoryIdByTagId.set(tag.id, existingCategoryId);
+          }
+          continue;
+        }
+
+        const categoryRes = await fetch('/api/budget-categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: tag.name, budgetId: activeBudget.id }),
+        });
+        await ensureOk(categoryRes);
+        const createdCategory = (await categoryRes.json()) as BudgetCategory;
+        categoryIdByTagId.set(tag.id, createdCategory.id);
+        categoryIdByNormalizedName.set(normalizedTagName, createdCategory.id);
+        existingNames.add(normalizedTagName);
+      }
+
+      for (const tag of tags) {
+        if (tag.level >= 2) continue;
+
+        const children = (childrenByParentId.get(tag.id) ?? []).filter((child) => child.level <= 1);
+        const hasChildren = children.length > 0;
+
+        if (hasChildren) {
+          const categoryId = categoryIdByTagId.get(tag.id);
+          if (!categoryId) continue;
+
+          for (const child of children) {
+            const normalizedChildName = normalizeName(child.name);
+            if (existingNames.has(normalizedChildName)) continue;
+
+            const lineRes = await fetch('/api/budget-lines', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: child.name,
+                period: 'monthly',
+                amount: 100,
+                rollover: false,
+                tagIds: [child.id],
+                categoryId,
+                budgetId: activeBudget.id,
+              }),
+            });
+            await ensureOk(lineRes);
+            existingNames.add(normalizedChildName);
+          }
+          continue;
+        }
+
+        const parentExists = !!(tag.parentId && tagsById.has(tag.parentId));
+        if (parentExists) continue;
+
+        const normalizedTagName = normalizeName(tag.name);
+        if (existingNames.has(normalizedTagName)) continue;
+
+        const lineRes = await fetch('/api/budget-lines', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: tag.name,
+            period: 'monthly',
+            amount: 100,
+            rollover: false,
+            tagIds: [tag.id],
+            categoryId: null,
+            budgetId: activeBudget.id,
+          }),
+        });
+        await ensureOk(lineRes);
+        existingNames.add(normalizedTagName);
+      }
+
+      await refresh();
+    } catch (error) {
+      setMutationError(error instanceof Error ? error.message : 'Failed to import tags.');
+    } finally {
+      setImportingTags(false);
+    }
+  }, [activeBudget, ensureOk, orderedCategories, refresh, summaryLines, tags]);
+
   // ---- Totals ----
 
   const totalBudget = summaryLines.reduce((s, l) => s + l.effectiveBudget, 0);
@@ -345,9 +467,18 @@ export default function BudgetPage() {
         <div className="flex gap-2">
           <Button
             variant="outline"
+            onClick={() => void handleImportTags()}
+            disabled={activeBudget === null || loading || importingTags}
+            title="Import Tags"
+          >
+            Import Tags
+          </Button>
+
+          <Button
+            variant="outline"
             size="icon"
             onClick={() => void refresh()}
-            disabled={loading}
+            disabled={loading || importingTags}
             title="Refresh"
           >
             <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />

@@ -53,6 +53,7 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
     tagged: number;
     skipped: number;
   } | null>(null);
+  const [ruleCreatedNotice, setRuleCreatedNotice] = useState<string | null>(null);
 
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -171,6 +172,10 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
     setPageState({ page: 1, scopeKey });
   };
 
+  const handleRuleCreated = useCallback(() => {
+    setRuleCreatedNotice('Auto-tag regex rule created. Use “Auto-Tag” to apply rules now.');
+  }, []);
+
   const emptyMessage =
     debouncedSearch || untaggedOnly
       ? 'No transactions match the current filters.'
@@ -219,6 +224,15 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
         </div>
       )}
 
+      {ruleCreatedNotice && (
+        <div className="bg-muted rounded-md p-3 text-sm">
+          {ruleCreatedNotice}
+          <button onClick={() => setRuleCreatedNotice(null)} className="ml-2 underline">
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="rounded-md border">
         <Table>
@@ -253,6 +267,7 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
                   availableTags={tags}
                   onSetTags={handleSetTags}
                   onUpdateNotes={handleUpdateNotes}
+                  onRuleCreated={handleRuleCreated}
                 />
               ))
             )}
