@@ -72,6 +72,7 @@ export default function TagsPage() {
       resetForm();
       setFormParentId(parentTag.id);
       setFormIsSource(parentTag.isSource);
+      setFormColor(parentTag.color);
       setDialogOpen(true);
     },
     [resetForm],

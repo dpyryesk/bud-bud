@@ -219,9 +219,16 @@ export async function GET(request: NextRequest) {
 
     let rolloverAmount = 0;
     if (bl.rollover) {
+      // Rollover should never include periods before the currently applicable budget starts.
+      // This guarantees the first month/period of a budget has zero rollover.
+      const lineRolloverStart =
+        applicableBudget.startDate > rolloverHistoryStart
+          ? applicableBudget.startDate
+          : rolloverHistoryStart;
+
       const completePeriods = getCompletePeriodsBetween(
         period,
-        rolloverHistoryStart,
+        lineRolloverStart,
         viewPeriod.start,
       );
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,8 +20,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { TagBadge } from '@/components/tags/tag-badge';
 import type { TransactionWithTags } from '@/types';
 import type { TagOptionWithLevel } from './constants';
+
+type MatchType = 'exact' | 'regex';
+
+type PreviewTransaction = {
+  id: string;
+  date: string;
+  name: string;
+  debit: number;
+  credit: number;
+  tags: { id: string; name: string; color: string; isSource: boolean }[];
+};
+
+type PreviewResponse = {
+  tagged: PreviewTransaction[];
+  taggedTotal: number;
+  untagged: PreviewTransaction[];
+  untaggedTotal: number;
+};
 
 interface AutoTagRuleSheetProps {
   open: boolean;
@@ -39,8 +58,11 @@ export function AutoTagRuleSheet({
   onRuleCreated,
 }: AutoTagRuleSheetProps) {
   const [pattern, setPattern] = useState('');
+  const [matchType, setMatchType] = useState<MatchType>('regex');
   const [tagId, setTagId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [preview, setPreview] = useState<PreviewResponse | null>(null);
 
   const testValue = useMemo(() => {
     return transaction.normalizedName ?? '';
@@ -48,17 +70,28 @@ export function AutoTagRuleSheet({
 
   const regexError = useMemo(() => {
     if (!pattern.trim()) return '';
-    try {
-      new RegExp(pattern, 'i');
-      return '';
-    } catch {
-      return 'Invalid regex pattern';
+    if (matchType === 'regex') {
+      try {
+        new RegExp(pattern, 'i');
+        return '';
+      } catch {
+        return 'Invalid regex pattern';
+      }
     }
-  }, [pattern]);
+
+    return '';
+  }, [pattern, matchType]);
 
   const testResult = useMemo(() => {
     if (!pattern.trim() || regexError) return null;
     try {
+      if (matchType === 'exact') {
+        return {
+          matched: testValue.toLowerCase() === pattern.toLowerCase(),
+          matchText: testValue,
+        };
+      }
+
       const regex = new RegExp(pattern, 'i');
       const match = regex.exec(testValue);
       if (!match) return { matched: false as const, matchText: '' };
@@ -66,11 +99,67 @@ export function AutoTagRuleSheet({
     } catch {
       return null;
     }
-  }, [pattern, regexError, testValue]);
+  }, [pattern, regexError, testValue, matchType]);
+
+  useEffect(() => {
+    const trimmed = pattern.trim();
+    if (!trimmed || regexError) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    let active = true;
+
+    const timer = setTimeout(async () => {
+      setPreviewLoading(true);
+      try {
+        const res = await fetch('/api/auto-tag/rules/preview', {
+          signal: abortController.signal,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pattern: trimmed,
+            matchType,
+          }),
+        });
+
+        if (!active) {
+          return;
+        }
+
+        if (!res.ok) {
+          setPreview(null);
+          return;
+        }
+
+        const data: PreviewResponse = await res.json();
+        if (active) {
+          setPreview(data);
+        }
+      } catch {
+        if (active) {
+          setPreview(null);
+        }
+      } finally {
+        if (active) {
+          setPreviewLoading(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      abortController.abort();
+      // Reset loading state so it never stays stuck when the fetch is aborted mid-flight
+      // (the finally block is guarded by `active`, so it won't run after abort)
+      setPreviewLoading(false);
+    };
+  }, [pattern, regexError, matchType]);
 
   const selectedTag = availableTags.find((t) => t.id === tagId);
 
-  const handleSave = async () => {
+  const handleSave = async (applyNow: boolean) => {
     if (!pattern.trim() || !tagId || regexError) return;
     setSaving(true);
     try {
@@ -79,14 +168,17 @@ export function AutoTagRuleSheet({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pattern: pattern.trim(),
-          matchType: 'regex',
+          matchType,
           tagId,
+          applyNow,
         }),
       });
       if (!res.ok) return;
       onOpenChange(false);
       setPattern('');
+      setMatchType('regex');
       setTagId('');
+      setPreview(null);
       onRuleCreated();
     } finally {
       setSaving(false);
@@ -108,17 +200,36 @@ export function AutoTagRuleSheet({
 
         <div className="space-y-4 px-4 pb-4">
           <div className="space-y-1">
-            <Label>Match field</Label>
-            <Input value="Normalized name" disabled readOnly />
+            <Label>Match type</Label>
+            <Select
+              value={matchType}
+              onValueChange={(v) => setMatchType((v as MatchType) ?? 'regex')}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue>
+                  {(value: string | null) =>
+                    value === 'exact'
+                      ? 'Exact match'
+                      : value === 'regex'
+                        ? 'Regex match'
+                        : 'Regex match'
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="exact">Exact match</SelectItem>
+                <SelectItem value="regex">Regex match</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="regex-pattern">Regex pattern</Label>
+            <Label htmlFor="pattern">Pattern</Label>
             <Input
-              id="regex-pattern"
+              id="pattern"
               value={pattern}
               onChange={(e) => setPattern(e.target.value)}
-              placeholder="e.g. uber\\s*eats"
+              placeholder={matchType === 'exact' ? 'e.g. uber eats' : 'e.g. uber\\s*eats'}
               className={regexError ? 'border-destructive' : ''}
             />
             {regexError && <p className="text-destructive text-xs">{regexError}</p>}
@@ -131,13 +242,27 @@ export function AutoTagRuleSheet({
                 <SelectValue>
                   {(value: string | null) => {
                     if (!value) return 'Select a tag…';
-                    return availableTags.find((t) => t.id === value)?.name ?? 'Unknown tag';
+                    const tag = availableTags.find((t) => t.id === value);
+                    if (!tag) return 'Unknown tag';
+                    return (
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="inline-block h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: tag.color }}
+                        />
+                        <span>{tag.name}</span>
+                      </span>
+                    );
                   }}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {availableTags.map((tag) => (
                   <SelectItem key={tag.id} value={tag.id}>
+                    <span
+                      className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: tag.color }}
+                    />
                     <span style={{ marginLeft: `${tag.level * 14}px` }}>{tag.name}</span>
                   </SelectItem>
                 ))}
@@ -150,16 +275,82 @@ export function AutoTagRuleSheet({
 
           <div className="bg-muted rounded-md p-3 text-sm">
             <p className="text-muted-foreground mb-1 text-xs">Transaction test value</p>
-            <p className="font-mono break-words">{testValue || '—'}</p>
+            <p className="font-mono wrap-break-word">{testValue || '—'}</p>
             <div className="mt-2 text-xs">
               {testResult?.matched ? (
-                <span className="text-green-600">Matched: &quot;{testResult.matchText}&quot;</span>
+                <span className="text-green-600">
+                  Matched ({matchType}): &quot;{testResult.matchText}&quot;
+                </span>
               ) : pattern.trim() && !regexError ? (
                 <span className="text-muted-foreground">No match</span>
               ) : (
-                <span className="text-muted-foreground">Enter a regex to test</span>
+                <span className="text-muted-foreground">Enter a pattern to test</span>
               )}
             </div>
+          </div>
+
+          <div className="space-y-2 rounded-md border p-3 text-sm">
+            <p className="text-muted-foreground text-xs">Matching transactions preview</p>
+            {previewLoading ? (
+              <p className="text-muted-foreground text-xs">Loading matches…</p>
+            ) : !pattern.trim() || regexError ? (
+              <p className="text-muted-foreground text-xs">
+                Enter a valid pattern to preview matches.
+              </p>
+            ) : !preview ? (
+              <p className="text-muted-foreground text-xs">No preview available.</p>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <p className="mb-1 text-xs font-medium">
+                    {preview.taggedTotal > preview.tagged.length
+                      ? `Tagged (showing ${preview.tagged.length} of ${preview.taggedTotal})`
+                      : `Tagged (${preview.taggedTotal})`}
+                  </p>
+                  <div className="max-h-32 space-y-1 overflow-y-auto">
+                    {preview.taggedTotal === 0 ? (
+                      <p className="text-muted-foreground text-xs">No tagged matches</p>
+                    ) : (
+                      preview.tagged.map((tx) => (
+                        <div key={tx.id} className="rounded border p-1.5">
+                          <p className="truncate text-xs font-medium">{tx.name}</p>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {tx.tags
+                              .filter((t) => !t.isSource)
+                              .map((t) => (
+                                <TagBadge
+                                  key={t.id}
+                                  name={t.name}
+                                  color={t.color}
+                                  className="text-[10px]"
+                                />
+                              ))}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium">
+                    {preview.untaggedTotal > preview.untagged.length
+                      ? `Untagged (showing ${preview.untagged.length} of ${preview.untaggedTotal})`
+                      : `Untagged (${preview.untaggedTotal})`}
+                  </p>
+                  <div className="max-h-32 space-y-1 overflow-y-auto">
+                    {preview.untaggedTotal === 0 ? (
+                      <p className="text-muted-foreground text-xs">No untagged matches</p>
+                    ) : (
+                      preview.untagged.map((tx) => (
+                        <div key={tx.id} className="rounded border p-1.5">
+                          <p className="truncate text-xs font-medium">{tx.name}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -168,10 +359,17 @@ export function AutoTagRuleSheet({
             Cancel
           </Button>
           <Button
-            onClick={() => void handleSave()}
+            onClick={() => void handleSave(false)}
             disabled={!pattern.trim() || !tagId || !!regexError || saving}
+            variant="outline"
           >
             {saving ? 'Saving…' : 'Save rule'}
+          </Button>
+          <Button
+            onClick={() => void handleSave(true)}
+            disabled={!pattern.trim() || !tagId || !!regexError || saving}
+          >
+            {saving ? 'Saving…' : 'Save and apply tags'}
           </Button>
         </SheetFooter>
       </SheetContent>

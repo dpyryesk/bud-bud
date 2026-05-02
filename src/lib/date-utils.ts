@@ -114,38 +114,64 @@ export function getCompletePeriodsBetween(
 ): { start: Date; end: Date }[] {
   const periods: { start: Date; end: Date }[] = [];
 
+  const utcMonthStart = (date: Date) =>
+    new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1, 0, 0, 0, 0));
+
+  const utcMonthEnd = (date: Date) =>
+    new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+
+  const utcYearStart = (date: Date) => new Date(Date.UTC(date.getUTCFullYear(), 0, 1, 0, 0, 0, 0));
+
+  const utcYearEnd = (date: Date) =>
+    new Date(Date.UTC(date.getUTCFullYear(), 11, 31, 23, 59, 59, 999));
+
   if (budgetPeriod === 'monthly') {
-    let current = startOfMonth(fromDate);
-    const endLimit = startOfMonth(toDate);
+    let current = utcMonthStart(fromDate);
+    const endLimit = utcMonthStart(toDate);
 
     while (current < endLimit) {
       periods.push({
         start: current,
-        end: endOfMonth(current),
+        end: utcMonthEnd(current),
       });
-      current = startOfMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1));
+      current = new Date(
+        Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + 1, 1, 0, 0, 0, 0),
+      );
     }
   } else if (budgetPeriod === 'biweekly') {
-    // Start from the given date and step by 14 days
-    const current = new Date(fromDate);
+    // Start from the given date and step by 14 days (UTC arithmetic — matches monthly/yearly)
+    let current = new Date(
+      Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth(), fromDate.getUTCDate()),
+    );
     while (current < toDate) {
-      const periodEnd = new Date(current);
-      periodEnd.setDate(periodEnd.getDate() + 13);
+      const periodEnd = new Date(
+        Date.UTC(
+          current.getUTCFullYear(),
+          current.getUTCMonth(),
+          current.getUTCDate() + 13,
+          23,
+          59,
+          59,
+          999,
+        ),
+      );
       if (periodEnd < toDate) {
         periods.push({ start: new Date(current), end: periodEnd });
       }
-      current.setDate(current.getDate() + 14);
+      current = new Date(
+        Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate() + 14),
+      );
     }
   } else if (budgetPeriod === 'yearly') {
-    let current = startOfYear(fromDate);
-    const endLimit = startOfYear(toDate);
+    let current = utcYearStart(fromDate);
+    const endLimit = utcYearStart(toDate);
 
     while (current < endLimit) {
       periods.push({
         start: current,
-        end: endOfYear(current),
+        end: utcYearEnd(current),
       });
-      current = startOfYear(new Date(current.getFullYear() + 1, 0, 1));
+      current = new Date(Date.UTC(current.getUTCFullYear() + 1, 0, 1, 0, 0, 0, 0));
     }
   }
 
