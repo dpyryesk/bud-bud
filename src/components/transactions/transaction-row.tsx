@@ -24,7 +24,7 @@ interface TransactionRowProps {
     previousTags: TransactionWithTags['tags'],
   ) => Promise<TransactionWithTags['tags']>;
   onUpdateNotes: (id: string, notes: string) => void;
-  onRuleCreated: () => void;
+  onRuleCreated: (applied: boolean) => void;
 }
 
 export function TransactionRow({

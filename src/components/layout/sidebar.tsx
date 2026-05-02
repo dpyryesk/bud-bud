@@ -22,21 +22,6 @@ const NAV_ITEMS = [
   { href: '/budgets', label: 'Budgets', icon: CalendarRange },
 ] as const;
 
-function NewTagButton() {
-  return (
-    <Link
-      href="/tags"
-      className={cn(
-        'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-        'text-muted-foreground hover:bg-muted hover:text-foreground',
-      )}
-    >
-      <Plus className="h-4 w-4" />
-      New Tag
-    </Link>
-  );
-}
-
 export function Sidebar() {
   const pathname = usePathname();
 
@@ -61,9 +46,6 @@ export function Sidebar() {
             </Link>
           );
         })}
-
-        <div className="my-1 border-t" />
-        <NewTagButton />
       </nav>
     </aside>
   );

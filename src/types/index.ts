@@ -80,6 +80,7 @@ export type BudgetSummaryResponse = {
   activeBudget: Budget | null;
   lines: BudgetSummaryLine[];
   totalIncome: number;
+  totalDebits: number;
 };
 
 // ---- CSV Import types ----

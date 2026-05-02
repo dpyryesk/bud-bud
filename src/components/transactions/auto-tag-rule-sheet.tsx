@@ -48,7 +48,7 @@ interface AutoTagRuleSheetProps {
   onOpenChange: (open: boolean) => void;
   transaction: TransactionWithTags;
   availableTags: TagOptionWithLevel[];
-  onRuleCreated: () => void;
+  onRuleCreated: (applied: boolean) => void;
 }
 
 export function AutoTagRuleSheet({
@@ -180,7 +180,7 @@ export function AutoTagRuleSheet({
       setMatchType('regex');
       setTagId('');
       setPreview(null);
-      onRuleCreated();
+      onRuleCreated(applyNow);
     } finally {
       setSaving(false);
     }

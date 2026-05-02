@@ -172,9 +172,17 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
     setPageState({ page: 1, scopeKey });
   };
 
-  const handleRuleCreated = useCallback(() => {
-    setRuleCreatedNotice('Auto-tag regex rule created. Use “Auto-Tag” to apply rules now.');
-  }, []);
+  const handleRuleCreated = useCallback(
+    (applied: boolean) => {
+      if (applied) {
+        void fetchTransactions();
+        setRuleCreatedNotice('Auto-tag rule created and applied. Tags updated.');
+      } else {
+        setRuleCreatedNotice('Auto-tag regex rule created. Use "Auto-Tag" to apply rules now.');
+      }
+    },
+    [fetchTransactions],
+  );
 
   const emptyMessage =
     debouncedSearch || untaggedOnly

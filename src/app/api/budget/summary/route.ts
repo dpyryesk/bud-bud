@@ -274,6 +274,12 @@ export async function GET(request: NextRequest) {
   }
 
   const totalIncome = currentPeriodTxs.reduce((sum, tx) => sum + tx.credit, 0);
+  const totalDebits = currentPeriodTxs.reduce((sum, tx) => sum + tx.debit, 0);
 
-  return NextResponse.json({ activeBudget: applicableBudget, lines: summaryLines, totalIncome });
+  return NextResponse.json({
+    activeBudget: applicableBudget,
+    lines: summaryLines,
+    totalIncome,
+    totalDebits,
+  });
 }
