@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { TagBadge } from '@/components/tags/tag-badge';
+import { TagSelectorDropdown } from '@/components/tags/tag-selector-dropdown';
 import { formatCurrency } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
 import type { TransactionWithTags } from '@/types';
@@ -122,47 +123,16 @@ export function TransactionRow({
           ))}
 
           {/* Add tag popover */}
-          <Popover>
-            <PopoverTrigger
-              className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), 'h-5 px-1.5')}
-              aria-label="Add tag"
-            >
-              +
-            </PopoverTrigger>
-            <PopoverContent className="w-52 p-2" align="start">
-              {availableTags.length === 0 ? (
-                <p className="text-muted-foreground p-1 text-xs">
-                  No tags available. Create some in Tags.
-                </p>
-              ) : (
-                <div className="max-h-52 space-y-0.5 overflow-y-auto">
-                  {availableTags.map((tag) => {
-                    const isSelected = nonSourceTags.some((t) => t.id === tag.id);
-                    return (
-                      <button
-                        key={tag.id}
-                        type="button"
-                        className={cn(
-                          'hover:bg-muted flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors',
-                          isSelected && 'bg-muted',
-                        )}
-                        onClick={() => void toggleTag(tag.id)}
-                      >
-                        <span
-                          className="h-3 w-3 shrink-0 rounded-full"
-                          style={{ backgroundColor: tag.color }}
-                        />
-                        <span className="truncate" style={{ marginLeft: `${tag.level * 14}px` }}>
-                          {tag.name}
-                        </span>
-                        {isSelected && <span className="ml-auto text-xs opacity-70">✓</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </PopoverContent>
-          </Popover>
+          <TagSelectorDropdown
+            mode="multi"
+            tags={availableTags}
+            value={nonSourceTags.map((t) => t.id)}
+            onToggle={(tagId) => void toggleTag(tagId)}
+            triggerClassName={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), 'h-5 px-1.5')}
+            triggerLabel="+"
+            triggerAriaLabel="Add tag"
+            align="start"
+          />
         </div>
       </TableCell>
 

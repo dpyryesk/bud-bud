@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, Fragment } from 'react';
+import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -20,6 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { TagBadge } from '@/components/tags/tag-badge';
+import { TagSelectorDropdown } from '@/components/tags/tag-selector-dropdown';
 import { cn } from '@/lib/utils';
 import type { BudgetSummaryLine, BudgetCategory } from '@/types';
 import type { TagOptionWithLevel } from './constants';
@@ -254,33 +256,27 @@ function BudgetLineDialogContent({
         </div>
         <div>
           <Label>Tags</Label>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {tags.map((tag, index) => {
-              const isSelected = formTagIds.includes(tag.id);
-              const showDivider = tag.level === 0 && index !== 0;
-              return (
-                <Fragment key={tag.id}>
-                  {showDivider && <div className="border-border my-1 w-full border-t" />}
-                  <p>
-                    <button
-                      type="button"
-                      onClick={() => toggleFormTag(tag.id)}
-                      className={cn(
-                        'rounded-full border px-3 py-1 text-xs transition-colors',
-                        isSelected ? 'border-current' : 'border-transparent opacity-50',
-                      )}
-                      style={{
-                        color: tag.color,
-                        backgroundColor: `${tag.color}15`,
-                        ...(tag.level > 0 && { marginLeft: `${tag.level * 12}px` }),
-                      }}
-                    >
-                      {tag.name}
-                    </button>
-                  </p>
-                </Fragment>
-              );
-            })}
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {tags
+              .filter((t) => formTagIds.includes(t.id))
+              .map((tag) => (
+                <TagBadge
+                  key={tag.id}
+                  name={tag.name}
+                  color={tag.color}
+                  onRemoveAction={() => toggleFormTag(tag.id)}
+                  className="text-xs"
+                />
+              ))}
+            <TagSelectorDropdown
+              mode="multi"
+              tags={tags}
+              value={formTagIds}
+              onToggle={toggleFormTag}
+              triggerClassName={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), 'h-5 px-1.5')}
+              triggerLabel="+"
+              triggerAriaLabel="Add tag"
+            />
           </div>
         </div>
         <div className="flex justify-end gap-2">

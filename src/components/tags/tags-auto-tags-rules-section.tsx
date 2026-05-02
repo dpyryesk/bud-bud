@@ -15,6 +15,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { TagBadge } from '@/components/tags/tag-badge';
+import { TagSelectorDropdown } from '@/components/tags/tag-selector-dropdown';
 import { Badge } from '@/components/ui/badge';
 
 export default function AutoTagRulesSection({ categoryTags }: { categoryTags: LeveledTag[] }) {
@@ -125,8 +126,6 @@ export default function AutoTagRulesSection({ categoryTags }: { categoryTags: Le
     [fetchRules],
   );
 
-  const selectedTagForForm = categoryTags.find((t) => t.id === formTagId);
-
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
@@ -198,38 +197,13 @@ export default function AutoTagRulesSection({ categoryTags }: { categoryTags: Le
               {/* Tag */}
               <div className="space-y-1">
                 <Label>Apply Tag</Label>
-                <Select value={formTagId} onValueChange={(v) => setFormTagId(v ?? '')}>
-                  <SelectTrigger>
-                    {selectedTagForForm ? (
-                      <span className="flex items-center gap-1.5 text-sm">
-                        <span
-                          className="inline-block h-2.5 w-2.5 flex-none rounded-full"
-                          style={{ backgroundColor: selectedTagForForm.color }}
-                        />
-                        {selectedTagForForm.name}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">Select a tag…</span>
-                    )}
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categoryTags.length === 0 ? (
-                      <div className="text-muted-foreground px-2 py-1.5 text-xs">
-                        No category tags yet
-                      </div>
-                    ) : (
-                      categoryTags.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          <span
-                            className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full"
-                            style={{ backgroundColor: t.color }}
-                          />
-                          <span style={{ marginLeft: `${t.level * 14}px` }}>{t.name}</span>
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+                <TagSelectorDropdown
+                  mode="single"
+                  tags={categoryTags}
+                  value={formTagId}
+                  onValueChange={(v) => setFormTagId(v)}
+                  placeholder="Select a tag…"
+                />
               </div>
 
               {/* Actions */}

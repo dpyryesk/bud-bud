@@ -41,6 +41,9 @@ export default function BudgetPage() {
   // Untracked spending
   const [totalUntracked, setTotalUntracked] = useState(0);
 
+  // Total income (sum of all credits for the period)
+  const [totalIncome, setTotalIncome] = useState(0);
+
   // Ordered display state (managed locally for drag-and-drop)
   const [orderedCategories, setOrderedCategories] = useState<BudgetCategory[]>([]);
   const [groupedLines, setGroupedLines] = useState<Record<string, BudgetSummaryLine[]>>({});
@@ -75,12 +78,14 @@ export default function BudgetPage() {
     if (!res.ok) {
       setSummaryLines([]);
       setActiveBudget(null);
+      setTotalIncome(0);
       setLoading(false);
-      return { activeBudget: null, lines: [] } as BudgetSummaryResponse;
+      return { activeBudget: null, lines: [], totalIncome: 0 } as BudgetSummaryResponse;
     }
     const data: BudgetSummaryResponse = await res.json();
     setSummaryLines(data.lines);
     setActiveBudget(data.activeBudget);
+    setTotalIncome(data.totalIncome ?? 0);
     setLoading(false);
     return data;
   }, [period]);
@@ -526,6 +531,7 @@ export default function BudgetPage() {
         totalActual={totalActual}
         totalRemaining={totalRemaining}
         totalUntracked={totalUntracked}
+        totalIncome={totalIncome}
       />
 
       {/* Budget Lines Table */}

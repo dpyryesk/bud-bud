@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTimePeriod } from '@/hooks/use-time-period';
 import { buttonVariants } from '@/components/ui/button';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,27 @@ function getMonthLabel(monthValue: string) {
 export function TimePeriodSelector() {
   const { period, setMonthYear, setPreset } = useTimePeriod();
   const [open, setOpen] = useState(false);
+
+  const handlePreviousMonth = () => {
+    const currentMonth = period.start.getMonth();
+    const currentYear = period.start.getFullYear();
+    if (currentMonth === 0) {
+      setMonthYear(11, currentYear - 1);
+    } else {
+      setMonthYear(currentMonth - 1, currentYear);
+    }
+  };
+
+  const handleNextMonth = () => {
+    const currentMonth = period.start.getMonth();
+    const currentYear = period.start.getFullYear();
+    if (currentMonth === 11) {
+      setMonthYear(0, currentYear + 1);
+    } else {
+      setMonthYear(currentMonth + 1, currentYear);
+    }
+  };
+
   const [selectedMonth, setSelectedMonth] = useState(String(period.start.getMonth()));
   const [selectedYear, setSelectedYear] = useState(String(period.start.getFullYear()));
 
@@ -80,65 +101,78 @@ export function TimePeriodSelector() {
   const yearOptions = buildYearOptions(Number(selectedYear));
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}>
-        <CalendarDays className="h-4 w-4" />
-        <span>{period.label}</span>
-      </PopoverTrigger>
-      <PopoverContent className="w-72" align="end">
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" size="sm" onClick={handleCurrentMonth}>
-              Current Month
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleCurrentYear}>
-              Current Year
+    <div className="flex items-center gap-1">
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={handlePreviousMonth}
+        aria-label="Previous month"
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </Button>
+      <Popover open={open} onOpenChange={handleOpenChange}>
+        <PopoverTrigger className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}>
+          <CalendarDays className="h-4 w-4" />
+          <span>{period.label}</span>
+        </PopoverTrigger>
+        <PopoverContent className="w-72" align="end">
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" size="sm" onClick={handleCurrentMonth}>
+                Current Month
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleCurrentYear}>
+                Current Year
+              </Button>
+            </div>
+
+            <p className="text-sm font-medium">Select Month and Year</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Select
+                value={selectedMonth}
+                onValueChange={(v) => {
+                  if (v !== null) setSelectedMonth(v);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue>{getMonthLabel(selectedMonth)}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map((month) => (
+                    <SelectItem key={month.value} value={month.value}>
+                      {month.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={selectedYear}
+                onValueChange={(v) => {
+                  if (v !== null) setSelectedYear(v);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {yearOptions.map((year) => (
+                    <SelectItem key={year} value={String(year)}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleApply} size="sm" className="w-full">
+              Apply
             </Button>
           </div>
-
-          <p className="text-sm font-medium">Select Month and Year</p>
-          <div className="grid grid-cols-2 gap-2">
-            <Select
-              value={selectedMonth}
-              onValueChange={(v) => {
-                if (v !== null) setSelectedMonth(v);
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue>{getMonthLabel(selectedMonth)}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {MONTHS.map((month) => (
-                  <SelectItem key={month.value} value={month.value}>
-                    {month.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={selectedYear}
-              onValueChange={(v) => {
-                if (v !== null) setSelectedYear(v);
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {yearOptions.map((year) => (
-                  <SelectItem key={year} value={String(year)}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button onClick={handleApply} size="sm" className="w-full">
-            Apply
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
+        </PopoverContent>
+      </Popover>
+      <Button variant="outline" size="icon" onClick={handleNextMonth} aria-label="Next month">
+        <ChevronRight className="h-4 w-4" />
+      </Button>
+    </div>
   );
 }

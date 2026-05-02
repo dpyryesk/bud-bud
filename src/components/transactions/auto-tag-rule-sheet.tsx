@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { TagBadge } from '@/components/tags/tag-badge';
+import { TagSelectorDropdown } from '@/components/tags/tag-selector-dropdown';
 import type { TransactionWithTags } from '@/types';
 import type { TagOptionWithLevel } from './constants';
 
@@ -237,37 +238,13 @@ export function AutoTagRuleSheet({
 
           <div className="space-y-1">
             <Label>Apply tag</Label>
-            <Select value={tagId} onValueChange={(v) => setTagId(v ?? '')}>
-              <SelectTrigger className="w-full">
-                <SelectValue>
-                  {(value: string | null) => {
-                    if (!value) return 'Select a tag…';
-                    const tag = availableTags.find((t) => t.id === value);
-                    if (!tag) return 'Unknown tag';
-                    return (
-                      <span className="flex items-center gap-2">
-                        <span
-                          className="inline-block h-2.5 w-2.5 rounded-full"
-                          style={{ backgroundColor: tag.color }}
-                        />
-                        <span>{tag.name}</span>
-                      </span>
-                    );
-                  }}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {availableTags.map((tag) => (
-                  <SelectItem key={tag.id} value={tag.id}>
-                    <span
-                      className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full"
-                      style={{ backgroundColor: tag.color }}
-                    />
-                    <span style={{ marginLeft: `${tag.level * 14}px` }}>{tag.name}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <TagSelectorDropdown
+              mode="single"
+              tags={availableTags}
+              value={tagId}
+              onValueChange={(v) => setTagId(v)}
+              placeholder="Select a tag…"
+            />
             {selectedTag && (
               <p className="text-muted-foreground text-xs">Selected: {selectedTag.name}</p>
             )}
