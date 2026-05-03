@@ -85,7 +85,7 @@ export function SortableLineRow({ line, onEdit, onDelete, onTagClick }: Sortable
       <div className="text-muted-foreground capitalize">{line.budgetLine.period}</div>
 
       {/* Budget */}
-      <div className="text-right tabular-nums">{formatCurrency(line.effectiveBudget)}</div>
+      <div className="text-right tabular-nums">{formatCurrency(line.scaledBudget)}</div>
 
       {/* Rollover */}
       <div className="text-muted-foreground text-right tabular-nums">

@@ -40,10 +40,10 @@ export function SortableCategorySection({
     id: category.id,
   });
 
-  const subtotalBudget = lines.reduce((s, l) => s + l.effectiveBudget, 0);
+  const subtotalBudget = lines.reduce((s, l) => s + l.scaledBudget, 0);
   const subtotalRollover = lines.reduce((s, l) => s + l.rolloverAmount, 0);
   const subtotalActual = lines.reduce((s, l) => s + l.actualSpending, 0);
-  const subtotalRemaining = subtotalBudget - subtotalActual;
+  const subtotalRemaining = lines.reduce((s, l) => s + l.remaining, 0);
 
   return (
     <div

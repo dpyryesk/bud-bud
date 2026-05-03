@@ -6,31 +6,7 @@ import {
   type BudgetPeriodType,
 } from '@/lib/date-utils';
 import type { Budget } from '@/generated/prisma/client';
-
-/**
- * Recursively collect all descendant tag IDs for a given set of tag IDs.
- * Uses a pre-built children map to avoid DB calls in the loop.
- */
-function collectDescendantTagIds(
-  tagIds: string[],
-  childrenMap: Map<string, string[]>,
-): Set<string> {
-  const allIds = new Set(tagIds);
-  const queue = [...tagIds];
-
-  while (queue.length > 0) {
-    const currentId = queue.shift()!;
-    const children = childrenMap.get(currentId) ?? [];
-    for (const childId of children) {
-      if (!allIds.has(childId)) {
-        allIds.add(childId);
-        queue.push(childId);
-      }
-    }
-  }
-
-  return allIds;
-}
+import { collectDescendantTagIds } from '@/lib/tag-tree';
 
 /**
  * Return the latest budget whose startDate <= date.
@@ -85,9 +61,25 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'start and end are required' }, { status: 400 });
   }
 
+  // Both params are expected as date-only strings (YYYY-MM-DD), parsed as UTC midnight.
+  // Extend the end date to UTC end-of-day so the transaction filter covers the full last day.
+  const startDate = new Date(start);
+  const endDateMidnight = new Date(end);
+  const endDate = new Date(
+    Date.UTC(
+      endDateMidnight.getUTCFullYear(),
+      endDateMidnight.getUTCMonth(),
+      endDateMidnight.getUTCDate(),
+      23,
+      59,
+      59,
+      999,
+    ),
+  );
+
   const viewPeriod = {
-    start: new Date(start),
-    end: new Date(end),
+    start: startDate,
+    end: endDate,
     label: '',
     type: 'custom' as const,
   };

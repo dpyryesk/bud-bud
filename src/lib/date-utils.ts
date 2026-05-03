@@ -6,7 +6,6 @@ import {
   subMonths,
   subYears,
   differenceInDays,
-  differenceInCalendarMonths,
   format,
 } from 'date-fns';
 
@@ -84,8 +83,13 @@ export function scaleBudgetAmount(
 
   switch (budgetPeriod) {
     case 'monthly': {
-      // Calculate how many months (fractional) the view period spans
-      const months = differenceInCalendarMonths(viewPeriod.end, viewPeriod.start) + 1;
+      // Use UTC month fields to avoid local-timezone day-shift on UTC-midnight boundaries.
+      // date-fns differenceInCalendarMonths() is local-timezone-aware: a UTC midnight date
+      // (e.g. 2026-01-01T00:00:00Z) appears as the previous calendar day in UTC-offset
+      // timezones (Dec 31 in UTC-4/UTC-5), which inflates the month count by 1.
+      const startUTCMonth = viewPeriod.start.getUTCFullYear() * 12 + viewPeriod.start.getUTCMonth();
+      const endUTCMonth = viewPeriod.end.getUTCFullYear() * 12 + viewPeriod.end.getUTCMonth();
+      const months = endUTCMonth - startUTCMonth + 1;
       return amount * months;
     }
     case 'biweekly': {

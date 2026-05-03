@@ -28,8 +28,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'start and end are required' }, { status: 400 });
   }
 
+  // Both params are expected as date-only strings (YYYY-MM-DD), parsed as UTC midnight.
+  // Extend the end date to UTC end-of-day so the transaction filter covers the full last day.
   const periodStart = new Date(start);
-  const periodEnd = new Date(end);
+  const periodEndMidnight = new Date(end);
+  const periodEnd = new Date(
+    Date.UTC(
+      periodEndMidnight.getUTCFullYear(),
+      periodEndMidnight.getUTCMonth(),
+      periodEndMidnight.getUTCDate(),
+      23,
+      59,
+      59,
+      999,
+    ),
+  );
 
   // Load all budgets to find the one applicable to this period
   const allBudgets = await prisma.budget.findMany({ orderBy: { startDate: 'asc' } });

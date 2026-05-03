@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
+import { format } from 'date-fns';
 import {
   DndContext,
   closestCenter,
@@ -88,8 +89,8 @@ export default function BudgetPage() {
   const fetchSummary = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams({
-      start: period.start.toISOString(),
-      end: period.end.toISOString(),
+      start: format(period.start, 'yyyy-MM-dd'),
+      end: format(period.end, 'yyyy-MM-dd'),
     });
     const res = await fetch(`/api/budget/summary?${params}`);
     if (!res.ok) {
@@ -116,8 +117,8 @@ export default function BudgetPage() {
 
   const fetchUntracked = useCallback(async () => {
     const params = new URLSearchParams({
-      start: period.start.toISOString(),
-      end: period.end.toISOString(),
+      start: format(period.start, 'yyyy-MM-dd'),
+      end: format(period.end, 'yyyy-MM-dd'),
     });
     const res = await fetch(`/api/budget/untracked?${params}`);
     const data: { totalUntracked: number } = await res.json();
@@ -467,9 +468,9 @@ export default function BudgetPage() {
 
   // ---- Totals ----
 
-  const totalBudget = summaryLines.reduce((s, l) => s + l.effectiveBudget, 0);
+  const totalBudget = summaryLines.reduce((s, l) => s + l.scaledBudget, 0);
   const totalActual = summaryLines.reduce((s, l) => s + l.actualSpending, 0);
-  const totalRemaining = totalBudget - totalActual;
+  const totalRemaining = summaryLines.reduce((s, l) => s + l.remaining, 0);
 
   const allLineIds = [
     ...orderedCategories.flatMap((c) => (groupedLines[c.id] ?? []).map((l) => l.budgetLine.id)),
