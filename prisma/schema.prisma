@@ -26,20 +26,21 @@ model Transaction {
 }
 
 model Tag {
-  id           String           @id @default(cuid())
-  name         String
-  color        String           @default("#6B7280")
-  isSource     Boolean          @default(false)
-  order        Int              @default(0)
-  parentId     String?
-  parent       Tag?             @relation("TagHierarchy", fields: [parentId], references: [id])
-  children     Tag[]            @relation("TagHierarchy")
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  transactions TransactionTag[]
-  budgetLines  BudgetLineTag[]
-  autoTagRules AutoTagRule[]
-  csvMappings  CsvMapping[]
+  id                  String                 @id @default(cuid())
+  name                String
+  color               String                 @default("#6B7280")
+  isSource            Boolean                @default(false)
+  order               Int                    @default(0)
+  parentId            String?
+  parent              Tag?                   @relation("TagHierarchy", fields: [parentId], references: [id])
+  children            Tag[]                  @relation("TagHierarchy")
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  transactions        TransactionTag[]
+  budgetLines         BudgetLineTag[]
+  autoTagRules        AutoTagRule[]
+  csvMappings         CsvMapping[]
+  untrackedCategories UntrackedCategoryTag[]
 }
 
 model TransactionTag {
@@ -53,13 +54,15 @@ model TransactionTag {
 }
 
 model Budget {
-  id             String           @id @default(cuid())
-  startDate      DateTime         @unique
-  resetRollover  Boolean          @default(false)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  categories     BudgetCategory[]
-  lines          BudgetLine[]
+  id                  String              @id @default(cuid())
+  startDate           DateTime            @unique
+  resetRollover       Boolean             @default(false)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  categories          BudgetCategory[]
+  lines               BudgetLine[]
+  incomeSources       IncomeSource[]
+  untrackedCategories UntrackedCategory[]
 }
 
 model BudgetCategory {
@@ -120,4 +123,39 @@ model AutoTagRule {
   tagId     String
   tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+}
+
+model IncomeSource {
+  id          String   @id @default(cuid())
+  budgetId    String
+  budget      Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  name        String
+  netAmount   Float
+  netPeriod   String // "monthly" | "biweekly" | "yearly"
+  grossAmount Float?
+  grossPeriod String? // "monthly" | "biweekly" | "yearly"
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model UntrackedCategory {
+  id        String                 @id @default(cuid())
+  budgetId  String
+  budget    Budget                 @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  name      String
+  order     Int                    @default(0)
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+  tags      UntrackedCategoryTag[]
+}
+
+model UntrackedCategoryTag {
+  id                  String            @id @default(cuid())
+  untrackedCategoryId String
+  tagId               String
+  untrackedCategory   UntrackedCategory @relation(fields: [untrackedCategoryId], references: [id], onDelete: Cascade)
+  tag                 Tag               @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([untrackedCategoryId, tagId])
 }
