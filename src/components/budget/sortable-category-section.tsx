@@ -11,6 +11,12 @@ import { ROW_GRID } from './constants';
 import { SortableLineRow } from './sortable-line-row';
 import type { BudgetSummaryLine, BudgetCategory } from '@/types';
 
+interface SelectedTag {
+  id: string;
+  name: string;
+  color: string;
+}
+
 interface SortableCategorySectionProps {
   category: BudgetCategory;
   lines: BudgetSummaryLine[];
@@ -18,6 +24,7 @@ interface SortableCategorySectionProps {
   onDeleteCategory: (id: string) => void;
   onEditLine: (line: BudgetSummaryLine) => void;
   onDeleteLine: (id: string) => void;
+  onTagClick?: (tag: SelectedTag) => void;
 }
 
 export function SortableCategorySection({
@@ -27,6 +34,7 @@ export function SortableCategorySection({
   onDeleteCategory,
   onEditLine,
   onDeleteLine,
+  onTagClick,
 }: SortableCategorySectionProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: category.id,
@@ -113,6 +121,7 @@ export function SortableCategorySection({
             line={line}
             onEdit={onEditLine}
             onDelete={onDeleteLine}
+            onTagClick={onTagClick}
           />
         ))}
       </SortableContext>

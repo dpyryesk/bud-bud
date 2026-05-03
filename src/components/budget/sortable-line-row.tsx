@@ -10,13 +10,20 @@ import { cn } from '@/lib/utils';
 import { ROW_GRID } from './constants';
 import type { BudgetSummaryLine } from '@/types';
 
+interface SelectedTag {
+  id: string;
+  name: string;
+  color: string;
+}
+
 interface SortableLineRowProps {
   line: BudgetSummaryLine;
   onEdit: (line: BudgetSummaryLine) => void;
   onDelete: (id: string) => void;
+  onTagClick?: (tag: SelectedTag) => void;
 }
 
-export function SortableLineRow({ line, onEdit, onDelete }: SortableLineRowProps) {
+export function SortableLineRow({ line, onEdit, onDelete, onTagClick }: SortableLineRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: line.budgetLine.id,
   });
@@ -57,9 +64,21 @@ export function SortableLineRow({ line, onEdit, onDelete }: SortableLineRowProps
 
       {/* Tags */}
       <div className="flex min-w-0 flex-wrap gap-1">
-        {line.budgetLine.tags.map((t) => (
-          <TagBadge key={t.id} name={t.name} color={t.color} className="text-xs" />
-        ))}
+        {line.budgetLine.tags.map((t) =>
+          onTagClick ? (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onTagClick(t)}
+              className="cursor-pointer rounded focus-visible:ring-2 focus-visible:outline-none"
+              title={`View transactions tagged "${t.name}"`}
+            >
+              <TagBadge name={t.name} color={t.color} className="text-xs hover:opacity-80" />
+            </button>
+          ) : (
+            <TagBadge key={t.id} name={t.name} color={t.color} className="text-xs" />
+          ),
+        )}
       </div>
 
       {/* Period */}

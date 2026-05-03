@@ -22,6 +22,7 @@ import { UncategorizedSection } from '@/components/budget/uncategorized-section'
 import { BudgetLineDialog } from '@/components/budget/budget-line-dialog';
 import { BudgetCategoryDialog } from '@/components/budget/budget-category-dialog';
 import { BudgetSummaryCards } from '@/components/budget/budget-summary-cards';
+import { TagTransactionsPanel } from '@/components/budget/tag-transactions-panel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { BudgetSummaryLine, BudgetCategory, BudgetSummaryResponse, Budget } from '@/types';
 import { TransactionsTable } from '@/components/transactions/transactions-table';
@@ -57,6 +58,19 @@ export default function BudgetPage() {
   const [editingLine, setEditingLine] = useState<BudgetSummaryLine | null>(null);
   const [catDialogOpen, setCatDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<BudgetCategory | null>(null);
+
+  // Tag transactions panel state
+  const [tagPanelOpen, setTagPanelOpen] = useState(false);
+  const [selectedTag, setSelectedTag] = useState<{
+    id: string;
+    name: string;
+    color: string;
+  } | null>(null);
+
+  const handleTagClick = (tag: { id: string; name: string; color: string }) => {
+    setSelectedTag(tag);
+    setTagPanelOpen(true);
+  };
 
   // DnD sensors
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -598,6 +612,7 @@ export default function BudgetPage() {
                   onDeleteCategory={(id) => void handleDeleteCategory(id)}
                   onEditLine={handleEditLine}
                   onDeleteLine={(id) => void handleDeleteLine(id)}
+                  onTagClick={handleTagClick}
                 />
               ))}
             </SortableContext>
@@ -608,6 +623,7 @@ export default function BudgetPage() {
                 lines={uncategorizedLines}
                 onEditLine={handleEditLine}
                 onDeleteLine={(id) => void handleDeleteLine(id)}
+                onTagClick={handleTagClick}
               />
             )}
           </DndContext>
@@ -626,6 +642,17 @@ export default function BudgetPage() {
           <TransactionsTable extraParams={{ unbudgeted: 'true' }} />
         </CardContent>
       </Card>
+
+      {/* Tag transactions panel */}
+      <TagTransactionsPanel
+        open={tagPanelOpen}
+        onOpenChange={(open) => {
+          setTagPanelOpen(open);
+          if (!open) setSelectedTag(null);
+        }}
+        tag={selectedTag}
+        period={period}
+      />
     </div>
   );
 }

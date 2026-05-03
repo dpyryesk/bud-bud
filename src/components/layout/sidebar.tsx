@@ -2,24 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  LayoutDashboard,
-  ArrowLeftRight,
-  Tags,
-  Upload,
-  PiggyBank,
-  CalendarRange,
-  Plus,
-} from 'lucide-react';
+import { LayoutDashboard, ArrowLeftRight, Tags, Upload, PiggyBank, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/import', label: 'Import', icon: Upload },
   { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
   { href: '/tags', label: 'Tags', icon: Tags },
-  { href: '/import', label: 'Import', icon: Upload },
   { href: '/budget', label: 'Budget', icon: PiggyBank },
-  { href: '/budgets', label: 'Budgets', icon: CalendarRange },
+  { href: '/budgets', label: 'Manage Budgets', icon: Settings },
 ] as const;
 
 export function Sidebar() {

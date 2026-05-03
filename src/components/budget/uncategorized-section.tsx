@@ -7,16 +7,24 @@ import { ROW_GRID } from './constants';
 import { SortableLineRow } from './sortable-line-row';
 import type { BudgetSummaryLine } from '@/types';
 
+interface SelectedTag {
+  id: string;
+  name: string;
+  color: string;
+}
+
 interface UncategorizedSectionProps {
   lines: BudgetSummaryLine[];
   onEditLine: (line: BudgetSummaryLine) => void;
   onDeleteLine: (id: string) => void;
+  onTagClick?: (tag: SelectedTag) => void;
 }
 
 export function UncategorizedSection({
   lines,
   onEditLine,
   onDeleteLine,
+  onTagClick,
 }: UncategorizedSectionProps) {
   const subtotalBudget = lines.reduce((s, l) => s + l.effectiveBudget, 0);
   const subtotalRollover = lines.reduce((s, l) => s + l.rolloverAmount, 0);
@@ -54,6 +62,7 @@ export function UncategorizedSection({
             line={line}
             onEdit={onEditLine}
             onDelete={onDeleteLine}
+            onTagClick={onTagClick}
           />
         ))}
       </SortableContext>
