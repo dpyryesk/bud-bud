@@ -1,10 +1,9 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { Wand2, ChevronLeft, ChevronRight, Search, FilterX, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useTimePeriod } from '@/hooks/use-time-period';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -17,6 +16,7 @@ import { buildTagsInDisplayOrder } from '@/lib/tag-tree';
 import type { TransactionWithTags } from '@/types';
 import { TransactionRow } from './transaction-row';
 import type { TagOption, TagOptionWithLevel } from './constants';
+import { TransactionsFilterBar } from './transactions-filter-bar';
 
 interface TransactionsTableProps {
   /** Extra query params forwarded to /api/transactions (e.g. { unbudgeted: 'true' }) */
@@ -26,28 +26,26 @@ interface TransactionsTableProps {
 export function TransactionsTable({ extraParams }: TransactionsTableProps) {
   const { period } = useTimePeriod();
 
-  // Stable string key representing the current "scope" (period + extra params).
-  // When this changes, pagination resets to page 1.
-  const scopeKey = useMemo(
-    () =>
-      JSON.stringify({
-        start: period.start.toISOString(),
-        end: period.end.toISOString(),
-        ...extraParams,
-      }),
-    [period, extraParams],
-  );
+  // ---- Filter state ----
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [untaggedOnly, setUntaggedOnly] = useState(false);
+  const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
+  const [debouncedMinAmount, setDebouncedMinAmount] = useState('');
+  const [debouncedMaxAmount, setDebouncedMaxAmount] = useState('');
 
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const minAmountDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const maxAmountDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ---- Data state ----
   const [transactions, setTransactions] = useState<TransactionWithTags[]>([]);
   const [total, setTotal] = useState(0);
-  // pageState bundles page + the scope it belongs to so we can reset atomically
-  // from useMemo/render path rather than inside a useEffect.
-  const [pageState, setPageState] = useState({ page: 1, scopeKey });
   const [totalPages, setTotalPages] = useState(1);
   const [tags, setTags] = useState<TagOptionWithLevel[]>([]);
   const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState('');
-  const [untaggedOnly, setUntaggedOnly] = useState(false);
   const [autoTagResult, setAutoTagResult] = useState<{
     total: number;
     tagged: number;
@@ -55,22 +53,98 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
   } | null>(null);
   const [ruleCreatedNotice, setRuleCreatedNotice] = useState<string | null>(null);
 
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ---- Scope key & pagination ----
+  // Stable string key representing the current "scope" (period + extra params + filters).
+  // When this changes, pagination resets to page 1.
+  const scopeKey = useMemo(
+    () =>
+      JSON.stringify({
+        start: period.start.toISOString(),
+        end: period.end.toISOString(),
+        debouncedSearch,
+        untaggedOnly,
+        filterTagIds,
+        debouncedMinAmount,
+        debouncedMaxAmount,
+        ...extraParams,
+      }),
+    [
+      period,
+      debouncedSearch,
+      untaggedOnly,
+      filterTagIds,
+      debouncedMinAmount,
+      debouncedMaxAmount,
+      extraParams,
+    ],
+  );
+
+  // pageState bundles page + the scope it belongs to so we can reset atomically
+  const [pageState, setPageState] = useState({ page: 1, scopeKey });
 
   // Derive the effective page: reset to 1 whenever the scope changes.
-  // This is a pure derivation from state — no effect needed.
   const effectivePage = pageState.scopeKey === scopeKey ? pageState.page : 1;
 
+  // ---- Debounced handlers ----
   const handleSearchChange = (value: string) => {
     setSearch(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
       setDebouncedSearch(value);
       setPageState({ page: 1, scopeKey });
     }, 300);
   };
 
+  const handleMinAmountChange = (value: string) => {
+    setMinAmount(value);
+    if (minAmountDebounceRef.current) clearTimeout(minAmountDebounceRef.current);
+    minAmountDebounceRef.current = setTimeout(() => {
+      setDebouncedMinAmount(value);
+      setPageState({ page: 1, scopeKey });
+    }, 500);
+  };
+
+  const handleMaxAmountChange = (value: string) => {
+    setMaxAmount(value);
+    if (maxAmountDebounceRef.current) clearTimeout(maxAmountDebounceRef.current);
+    maxAmountDebounceRef.current = setTimeout(() => {
+      setDebouncedMaxAmount(value);
+      setPageState({ page: 1, scopeKey });
+    }, 500);
+  };
+
+  // ---- Tag filter handler (mutex with untaggedOnly) ----
+  const handleFilterTagToggle = (tagId: string) => {
+    setFilterTagIds((prev) => {
+      const next = prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId];
+      // Selecting any tag clears the "untagged only" mode
+      if (next.length > 0) setUntaggedOnly(false);
+      return next;
+    });
+    setPageState({ page: 1, scopeKey });
+  };
+
+  // ---- Untagged-only toggle (mutex with tag filter) ----
+  const handleUntaggedOnlyToggle = () => {
+    setUntaggedOnly((v) => {
+      const next = !v;
+      if (next) setFilterTagIds([]);
+      return next;
+    });
+    setPageState({ page: 1, scopeKey });
+  };
+
+  // ---- Clear advanced filters ----
+  const handleClearAdvancedFilters = () => {
+    setFilterTagIds([]);
+    setMinAmount('');
+    setMaxAmount('');
+    setDebouncedMinAmount('');
+    setDebouncedMaxAmount('');
+    setPageState({ page: 1, scopeKey });
+  };
+
+  // ---- Fetch transactions ----
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
     try {
@@ -82,6 +156,12 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
       });
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (untaggedOnly) params.set('untaggedOnly', 'true');
+      // Tag filter: only apply if no tag filter comes from extraParams
+      if (filterTagIds.length > 0 && !extraParams?.tagId && !extraParams?.tagIds) {
+        params.set('tagIds', filterTagIds.join(','));
+      }
+      if (debouncedMinAmount) params.set('minAmount', debouncedMinAmount);
+      if (debouncedMaxAmount) params.set('maxAmount', debouncedMaxAmount);
       if (extraParams) {
         for (const [k, v] of Object.entries(extraParams)) {
           params.set(k, v);
@@ -105,7 +185,16 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
     } finally {
       setLoading(false);
     }
-  }, [period, effectivePage, debouncedSearch, untaggedOnly, extraParams]);
+  }, [
+    period,
+    effectivePage,
+    debouncedSearch,
+    untaggedOnly,
+    filterTagIds,
+    debouncedMinAmount,
+    debouncedMaxAmount,
+    extraParams,
+  ]);
 
   const fetchTags = useCallback(async () => {
     try {
@@ -129,6 +218,7 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
     return () => clearTimeout(id);
   }, [fetchTags]);
 
+  // ---- Tag update handlers ----
   const handleTagsUpdated = useCallback(
     (transactionId: string, updatedTags: TransactionWithTags['tags']) => {
       setTransactions((prev) =>
@@ -188,11 +278,6 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
     }
   };
 
-  const toggleUntaggedOnly = () => {
-    setUntaggedOnly((v) => !v);
-    setPageState({ page: 1, scopeKey });
-  };
-
   const handleRuleCreated = useCallback(
     (applied: boolean) => {
       if (applied) {
@@ -205,41 +290,39 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
     [fetchTransactions],
   );
 
+  // Hide advanced filters when the parent already filters by tag via extraParams
+  const hideAdvancedFilters = !!(extraParams?.tagId ?? extraParams?.tagIds);
+
   const emptyMessage =
-    debouncedSearch || untaggedOnly
+    debouncedSearch ||
+    untaggedOnly ||
+    filterTagIds.length > 0 ||
+    debouncedMinAmount ||
+    debouncedMaxAmount
       ? 'No transactions match the current filters.'
       : 'No transactions for this period.';
 
   return (
     <div className="space-y-3">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2">
-        <div className="relative max-w-sm flex-1">
-          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2" />
-          <Input
-            placeholder="Search transactions…"
-            value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-8"
-          />
-        </div>
-        <Button
-          variant={untaggedOnly ? 'default' : 'outline'}
-          size="sm"
-          onClick={toggleUntaggedOnly}
-          title={untaggedOnly ? 'Showing untagged only — click to clear' : 'Show untagged only'}
-        >
-          <FilterX className="mr-1.5 h-3.5 w-3.5" />
-          Untagged only
-        </Button>
-        <Button onClick={() => void handleAutoTag()} variant="outline" size="sm">
-          <Wand2 className="mr-1.5 h-3.5 w-3.5" />
-          Auto-Tag
-        </Button>
-        <span className="text-muted-foreground ml-auto text-sm">
-          {loading ? 'Loading…' : `${total} transaction${total !== 1 ? 's' : ''}`}
-        </span>
-      </div>
+      {/* Toolbar / filter bar */}
+      <TransactionsFilterBar
+        availableTags={tags}
+        search={search}
+        untaggedOnly={untaggedOnly}
+        filterTagIds={filterTagIds}
+        minAmount={minAmount}
+        maxAmount={maxAmount}
+        onSearchChange={handleSearchChange}
+        onUntaggedOnlyToggle={handleUntaggedOnlyToggle}
+        onFilterTagToggle={handleFilterTagToggle}
+        onMinAmountChange={handleMinAmountChange}
+        onMaxAmountChange={handleMaxAmountChange}
+        onClearAdvancedFilters={handleClearAdvancedFilters}
+        onAutoTag={() => void handleAutoTag()}
+        total={total}
+        loading={loading}
+        hideAdvancedFilters={hideAdvancedFilters}
+      />
 
       {/* Auto-tag result banner */}
       {autoTagResult && (

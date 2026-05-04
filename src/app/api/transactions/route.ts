@@ -44,6 +44,8 @@ export async function GET(request: NextRequest) {
   const untaggedOnly = searchParams.get('untaggedOnly') === 'true';
   const unbudgeted = searchParams.get('unbudgeted') === 'true';
   const search = searchParams.get('search')?.trim() ?? '';
+  const minAmountVal = parseFloat(searchParams.get('minAmount') ?? '');
+  const maxAmountVal = parseFloat(searchParams.get('maxAmount') ?? '');
 
   if (!Number.isInteger(rawPage) || !Number.isInteger(rawLimit)) {
     return NextResponse.json({ error: 'page and limit must be integers' }, { status: 400 });
@@ -87,6 +89,21 @@ export async function GET(request: NextRequest) {
         tag: { isSource: false },
       },
     };
+  }
+
+  // ---- Amount range filter ----
+  if (!Number.isNaN(minAmountVal) || !Number.isNaN(maxAmountVal)) {
+    const debitCond: Record<string, number> = { gt: 0 };
+    const creditCond: Record<string, number> = { gt: 0 };
+    if (!Number.isNaN(minAmountVal)) {
+      debitCond.gte = minAmountVal;
+      creditCond.gte = minAmountVal;
+    }
+    if (!Number.isNaN(maxAmountVal)) {
+      debitCond.lte = maxAmountVal;
+      creditCond.lte = maxAmountVal;
+    }
+    where.OR = [{ debit: debitCond }, { credit: creditCond }];
   }
 
   // ---- Unbudgeted filter: transactions not covered by any budget line ----
