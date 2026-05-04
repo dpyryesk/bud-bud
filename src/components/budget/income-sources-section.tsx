@@ -15,6 +15,8 @@ interface IncomeSourcesSectionProps {
 
 export function IncomeSourcesSection({ budgetId, onRefresh }: IncomeSourcesSectionProps) {
   const [sources, setSources] = useState<IncomeSource[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<IncomeSource | null>(null);
 
@@ -23,9 +25,16 @@ export function IncomeSourcesSection({ budgetId, onRefresh }: IncomeSourcesSecti
       setSources([]);
       return;
     }
-    const res = await fetch(`/api/income-sources?budgetId=${budgetId}`);
-    if (res.ok) {
-      setSources(await res.json());
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/income-sources?budgetId=${budgetId}`);
+      if (res.ok) {
+        setSources(await res.json());
+      }
+    } catch {
+      // non-critical
+    } finally {
+      setLoading(false);
     }
   }, [budgetId]);
 
@@ -42,15 +51,24 @@ export function IncomeSourcesSection({ budgetId, onRefresh }: IncomeSourcesSecti
   };
 
   const handleEdit = (source: IncomeSource) => {
+    setDeleteError(null);
     setEditingSource(source);
     setDialogOpen(true);
   };
 
   const handleDelete = async (source: IncomeSource) => {
     if (!window.confirm(`Delete income source "${source.name}"?`)) return;
-    const res = await fetch(`/api/income-sources/${source.id}`, { method: 'DELETE' });
-    if (res.ok) {
-      await handleSuccess();
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/income-sources/${source.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        await handleSuccess();
+      } else {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        setDeleteError(data?.error ?? `Delete failed (${res.status})`);
+      }
+    } catch {
+      setDeleteError('Network error. Please try again.');
     }
   };
 
@@ -95,7 +113,23 @@ export function IncomeSourcesSection({ budgetId, onRefresh }: IncomeSourcesSecti
         />
       </CardHeader>
       <CardContent>
-        {sources.length === 0 ? (
+        {deleteError && (
+          <p className="bg-destructive/10 text-destructive mb-3 rounded-md px-3 py-2 text-sm">
+            {deleteError}
+          </p>
+        )}
+        {loading ? (
+          <div className="space-y-2" aria-busy="true" aria-label="Loading income sources…">
+            {[1, 2].map((i) => (
+              <div key={i} className="flex gap-4">
+                <div className="bg-muted h-4 w-28 animate-pulse rounded" />
+                <div className="bg-muted h-4 w-16 animate-pulse rounded" />
+                <div className="bg-muted h-4 w-16 animate-pulse rounded" />
+                <div className="bg-muted h-4 w-20 animate-pulse rounded" />
+              </div>
+            ))}
+          </div>
+        ) : sources.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             No income sources yet. Add one to track your expected income.
           </p>

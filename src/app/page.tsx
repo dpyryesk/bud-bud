@@ -3,12 +3,14 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { format, startOfYear, endOfYear } from 'date-fns';
 import Link from 'next/link';
+import { AlertCircle } from 'lucide-react';
 import { useTimePeriod } from '@/hooks/use-time-period';
 import { getYearlyAmount } from '@/lib/date-utils';
 import { buildTagsInDisplayOrder } from '@/lib/tag-tree';
 import { IncomeSourcesCard } from '@/components/dashboard/income-sources-card';
 import { ExpensesTable } from '@/components/dashboard/expenses-table';
 import { UntrackedCategoriesSection } from '@/components/dashboard/untracked-categories-section';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import type {
   BudgetSummaryResponse,
   Budget,
@@ -17,6 +19,45 @@ import type {
   IncomeSource,
 } from '@/types';
 import type { TagOption, TagOptionWithLevel } from '@/components/budget/constants';
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6" aria-busy="true" aria-label="Loading dashboard…">
+      {/* Income card skeleton */}
+      <Card>
+        <CardHeader>
+          <div className="bg-muted h-5 w-36 animate-pulse rounded" />
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {[1, 2].map((i) => (
+            <div key={i} className="flex gap-4">
+              <div className="bg-muted h-4 w-32 animate-pulse rounded" />
+              <div className="bg-muted h-4 w-20 animate-pulse rounded" />
+              <div className="bg-muted h-4 w-16 animate-pulse rounded" />
+              <div className="bg-muted h-4 w-24 animate-pulse rounded" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+      {/* Expenses table skeleton */}
+      <Card>
+        <CardHeader>
+          <div className="bg-muted h-5 w-40 animate-pulse rounded" />
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex gap-4">
+              <div className="bg-muted h-4 w-28 animate-pulse rounded" />
+              <div className="bg-muted h-4 w-16 animate-pulse rounded" />
+              <div className="bg-muted h-4 w-16 animate-pulse rounded" />
+              <div className="bg-muted h-4 w-20 animate-pulse rounded" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const { period } = useTimePeriod();
@@ -35,7 +76,8 @@ export default function DashboardPage() {
   // Budget summary data
   const [activeBudget, setActiveBudget] = useState<Budget | null>(null);
   const [summaryLines, setSummaryLines] = useState<BudgetSummaryLine[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Income sources
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
@@ -69,6 +111,7 @@ export default function DashboardPage() {
 
   const fetchSummary = useCallback(async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const params = new URLSearchParams({
         start: format(yearPeriod.start, 'yyyy-MM-dd'),
@@ -78,29 +121,44 @@ export default function DashboardPage() {
       if (!res.ok) {
         setSummaryLines([]);
         setActiveBudget(null);
+        if (res.status !== 404) {
+          setFetchError(`Failed to load budget data (${res.status})`);
+        }
         return;
       }
       const data = (await res.json()) as BudgetSummaryResponse;
       setActiveBudget(data.activeBudget);
       setSummaryLines(data.lines ?? []);
+    } catch {
+      setSummaryLines([]);
+      setActiveBudget(null);
+      setFetchError('Unable to load dashboard data. Please try again.');
     } finally {
       setLoading(false);
     }
   }, [yearPeriod]);
 
   const fetchIncomeSources = useCallback(async (budgetId: string) => {
-    const res = await fetch(`/api/income-sources?budgetId=${budgetId}`);
-    if (res.ok) {
-      setIncomeSources((await res.json()) as IncomeSource[]);
+    try {
+      const res = await fetch(`/api/income-sources?budgetId=${budgetId}`);
+      if (res.ok) {
+        setIncomeSources((await res.json()) as IncomeSource[]);
+      }
+    } catch {
+      // non-critical — income sources just won't display
     }
   }, []);
 
   const fetchTags = useCallback(async () => {
-    const res = await fetch('/api/tags');
-    if (!res.ok) return;
-    const data = (await res.json()) as TagOption[];
-    const categoryTags = data.filter((t) => !t.isSource);
-    setTags(buildTagsInDisplayOrder(categoryTags));
+    try {
+      const res = await fetch('/api/tags');
+      if (!res.ok) return;
+      const data = (await res.json()) as TagOption[];
+      const categoryTags = data.filter((t) => !t.isSource);
+      setTags(buildTagsInDisplayOrder(categoryTags));
+    } catch {
+      // non-critical
+    }
   }, []);
 
   useEffect(() => {
@@ -132,10 +190,21 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
-      <p className="text-muted-foreground">Showing data for: {yearPeriod.label}</p>
+      <div>
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <p className="text-muted-foreground text-sm">Showing data for: {yearPeriod.label}</p>
+      </div>
 
-      {!loading && !activeBudget ? (
+      {fetchError && (
+        <div className="bg-destructive/10 text-destructive flex items-center gap-2 rounded-md px-3 py-2 text-sm">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {fetchError}
+        </div>
+      )}
+
+      {loading ? (
+        <DashboardSkeleton />
+      ) : !activeBudget ? (
         <div className="text-muted-foreground rounded-lg border border-dashed p-8 text-center">
           <p className="font-medium">No budget configured.</p>
           <p className="mt-1 text-sm">

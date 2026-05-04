@@ -25,9 +25,14 @@ export default function BudgetsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const fetchBudgets = useCallback(async () => {
-    const res = await fetch('/api/budgets');
-    const data: BudgetWithMeta[] = await res.json();
-    return data;
+    try {
+      const res = await fetch('/api/budgets');
+      if (!res.ok) return [];
+      const data: BudgetWithMeta[] = await res.json();
+      return data;
+    } catch {
+      return [];
+    }
   }, []);
 
   useEffect(() => {
@@ -49,9 +54,12 @@ export default function BudgetsPage() {
 
   const reloadBudgets = useCallback(async () => {
     setLoading(true);
-    const data = await fetchBudgets();
-    setBudgets(data);
-    setLoading(false);
+    try {
+      const data = await fetchBudgets();
+      setBudgets(data);
+    } finally {
+      setLoading(false);
+    }
   }, [fetchBudgets]);
 
   const handleCreate = useCallback(() => {
@@ -96,7 +104,7 @@ export default function BudgetsPage() {
   const formatDate = (iso: string) => formatIsoDateForDisplay(iso);
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Budgets</h1>
         <Button onClick={handleCreate}>
@@ -112,7 +120,16 @@ export default function BudgetsPage() {
       )}
 
       {loading ? (
-        <p className="text-muted-foreground text-sm">Loading…</p>
+        <div className="space-y-2" aria-busy="true" aria-label="Loading budgets…">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex gap-4 rounded-md border px-4 py-3">
+              <div className="bg-muted h-4 w-24 animate-pulse rounded" />
+              <div className="bg-muted h-4 w-24 animate-pulse rounded" />
+              <div className="bg-muted h-4 w-10 animate-pulse rounded" />
+              <div className="bg-muted ml-auto h-4 w-40 animate-pulse rounded" />
+            </div>
+          ))}
+        </div>
       ) : budgets.length === 0 ? (
         <p className="text-muted-foreground text-sm">No budgets yet. Create your first budget.</p>
       ) : (

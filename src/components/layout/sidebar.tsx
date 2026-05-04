@@ -48,7 +48,7 @@ export function MobileNav() {
 
   return (
     <nav className="bg-background fixed right-0 bottom-0 left-0 z-50 border-t md:hidden">
-      <div className="flex items-center justify-around">
+      <div className="flex items-stretch justify-around">
         {NAV_ITEMS.map((item) => {
           const isActive = pathname === item.href;
           return (
@@ -56,12 +56,12 @@ export function MobileNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex flex-col items-center gap-1 px-3 py-2 text-xs',
+                'flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-2 text-[10px] leading-tight',
                 isActive ? 'text-primary' : 'text-muted-foreground',
               )}
             >
-              <item.icon className="h-5 w-5" />
-              {item.label}
+              <item.icon className="h-5 w-5 shrink-0" />
+              <span className="w-full truncate text-center">{item.label}</span>
             </Link>
           );
         })}

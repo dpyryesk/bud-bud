@@ -46,6 +46,7 @@ export function UntrackedCategoriesSection({
     TransactionWithTags[]
   >([]);
   const [loading, setLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -103,8 +104,18 @@ export function UntrackedCategoriesSection({
 
   const handleDelete = async (cat: UntrackedCategoryWithSpending) => {
     if (!window.confirm(`Delete untracked category "${cat.name}"?`)) return;
-    const res = await fetch(`/api/untracked-categories/${cat.id}`, { method: 'DELETE' });
-    if (res.ok) await fetchData();
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/untracked-categories/${cat.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        await fetchData();
+      } else {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        setDeleteError(data?.error ?? `Delete failed (${res.status})`);
+      }
+    } catch {
+      setDeleteError('Network error. Please try again.');
+    }
   };
 
   const handleDialogOpenChange = (open: boolean) => {
@@ -142,8 +153,22 @@ export function UntrackedCategoriesSection({
           </Button>
         </CardHeader>
         <CardContent>
+          {deleteError && (
+            <p className="bg-destructive/10 text-destructive mb-3 rounded-md px-3 py-2 text-sm">
+              {deleteError}
+            </p>
+          )}
           {loading ? (
-            <p className="text-muted-foreground text-sm">Loading…</p>
+            <div className="space-y-2" aria-busy="true" aria-label="Loading…">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex gap-4">
+                  <div className="bg-muted h-4 w-28 animate-pulse rounded" />
+                  <div className="bg-muted h-4 w-32 animate-pulse rounded" />
+                  <div className="bg-muted h-4 w-16 animate-pulse rounded" />
+                  <div className="bg-muted h-4 w-16 animate-pulse rounded" />
+                </div>
+              ))}
+            </div>
           ) : categories.length === 0 && totalTrulyUncategorized === 0 ? (
             <p className="text-muted-foreground text-sm">
               No untracked spending found for this period.

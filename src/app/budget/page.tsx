@@ -81,56 +81,84 @@ export default function BudgetPage() {
 
   const fetchCategories = useCallback(async (budgetId: string | null) => {
     if (!budgetId) return [];
-    const params = new URLSearchParams({ budgetId });
-    const res = await fetch(`/api/budget-categories?${params}`);
-    const data: BudgetCategory[] = await res.json();
-    return data;
+    try {
+      const params = new URLSearchParams({ budgetId });
+      const res = await fetch(`/api/budget-categories?${params}`);
+      if (!res.ok) return [];
+      const data: BudgetCategory[] = await res.json();
+      return data;
+    } catch {
+      return [];
+    }
   }, []);
 
   const fetchSummary = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams({
-      start: format(period.start, 'yyyy-MM-dd'),
-      end: format(period.end, 'yyyy-MM-dd'),
-    });
-    const res = await fetch(`/api/budget/summary?${params}`);
-    if (!res.ok) {
+    try {
+      const params = new URLSearchParams({
+        start: format(period.start, 'yyyy-MM-dd'),
+        end: format(period.end, 'yyyy-MM-dd'),
+      });
+      const res = await fetch(`/api/budget/summary?${params}`);
+      if (!res.ok) {
+        setSummaryLines([]);
+        setActiveBudget(null);
+        setTotalIncome(0);
+        setTotalDebits(0);
+        return {
+          activeBudget: null,
+          lines: [],
+          totalIncome: 0,
+          totalDebits: 0,
+        } as BudgetSummaryResponse;
+      }
+      const data: BudgetSummaryResponse = await res.json();
+      setSummaryLines(data.lines);
+      setActiveBudget(data.activeBudget);
+      setTotalIncome(data.totalIncome ?? 0);
+      setTotalDebits(data.totalDebits ?? 0);
+      return data;
+    } catch {
       setSummaryLines([]);
       setActiveBudget(null);
       setTotalIncome(0);
       setTotalDebits(0);
-      setLoading(false);
       return {
         activeBudget: null,
         lines: [],
         totalIncome: 0,
         totalDebits: 0,
       } as BudgetSummaryResponse;
+    } finally {
+      setLoading(false);
     }
-    const data: BudgetSummaryResponse = await res.json();
-    setSummaryLines(data.lines);
-    setActiveBudget(data.activeBudget);
-    setTotalIncome(data.totalIncome ?? 0);
-    setTotalDebits(data.totalDebits ?? 0);
-    setLoading(false);
-    return data;
   }, [period]);
 
   const fetchUntracked = useCallback(async () => {
-    const params = new URLSearchParams({
-      start: format(period.start, 'yyyy-MM-dd'),
-      end: format(period.end, 'yyyy-MM-dd'),
-    });
-    const res = await fetch(`/api/budget/untracked?${params}`);
-    const data: { totalUntracked: number } = await res.json();
-    setTotalUntracked(data.totalUntracked);
+    try {
+      const params = new URLSearchParams({
+        start: format(period.start, 'yyyy-MM-dd'),
+        end: format(period.end, 'yyyy-MM-dd'),
+      });
+      const res = await fetch(`/api/budget/untracked?${params}`);
+      if (!res.ok) return;
+      const data: { totalUntracked: number } = await res.json();
+      setTotalUntracked(data.totalUntracked);
+    } catch {
+      // non-critical
+    }
   }, [period]);
 
   const fetchTags = useCallback(async () => {
-    const res = await fetch('/api/tags');
-    const data = await res.json();
-    const categoryTags = data.filter((t: TagOption) => !t.isSource);
-    setTags(buildTagsInDisplayOrder(categoryTags));
+    try {
+      const res = await fetch('/api/tags');
+      if (!res.ok) return;
+      const data = await res.json();
+      const categoryTags = data.filter((t: TagOption) => !t.isSource);
+      setTags(buildTagsInDisplayOrder(categoryTags));
+    } catch {
+      // non-critical
+    }
   }, []);
 
   const refresh = useCallback(async () => {

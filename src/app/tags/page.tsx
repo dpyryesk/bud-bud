@@ -33,16 +33,22 @@ export default function TagsPage() {
   const [saving, setSaving] = useState(false);
 
   const fetchTags = useCallback(async () => {
-    const res = await fetch('/api/tags');
-    const data = await res.json();
-    setTags(data);
+    try {
+      const res = await fetch('/api/tags');
+      if (!res.ok) return;
+      const data = await res.json();
+      setTags(data);
+    } catch {
+      // non-critical
+    }
   }, []);
 
   useEffect(() => {
-    fetch('/api/tags')
-      .then((res) => res.json())
-      .then((data) => setTags(data));
-  }, []);
+    const id = setTimeout(() => {
+      void fetchTags();
+    }, 0);
+    return () => clearTimeout(id);
+  }, [fetchTags]);
 
   const resetForm = useCallback(() => {
     setFormName('');
@@ -81,8 +87,8 @@ export default function TagsPage() {
   const handleDelete = useCallback(
     async (id: string) => {
       if (!confirm('Delete this tag? Child tags will be moved up to its parent.')) return;
-      await fetch(`/api/tags/${id}`, { method: 'DELETE' });
-      fetchTags();
+      const res = await fetch(`/api/tags/${id}`, { method: 'DELETE' });
+      if (res.ok) void fetchTags();
     },
     [fetchTags],
   );

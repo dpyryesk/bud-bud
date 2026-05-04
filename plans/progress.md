@@ -13,4 +13,6 @@
 [x] Build budget view — calculations with scaling, rollup, split, rollover + display
 [x] Add categories to the budget view — budget lines grouped by category, subtotals for each category, drag-and-drop reordering of categories and budget lines
 [x] Build dashboard + charts with recharts
-[ ] Polish — error handling, loading states, responsive design, edge cases
+[x] Polish — error handling, loading states, responsive design, edge cases
+[ ] Add advanced filtering to the transactions view
+[ ] Handle bi-weekly periods (there can be two or three per month)

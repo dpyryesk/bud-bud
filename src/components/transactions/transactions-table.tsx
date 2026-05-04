@@ -88,20 +88,35 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
         }
       }
       const res = await fetch(`/api/transactions?${params}`);
+      if (!res.ok) {
+        setTransactions([]);
+        setTotal(0);
+        setTotalPages(1);
+        return;
+      }
       const data = await res.json();
-      setTransactions(data.data);
-      setTotal(data.total);
-      setTotalPages(data.totalPages);
+      setTransactions(data.data ?? []);
+      setTotal(data.total ?? 0);
+      setTotalPages(data.totalPages ?? 1);
+    } catch {
+      setTransactions([]);
+      setTotal(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
   }, [period, effectivePage, debouncedSearch, untaggedOnly, extraParams]);
 
   const fetchTags = useCallback(async () => {
-    const res = await fetch('/api/tags');
-    const data = await res.json();
-    const categoryTags = data.filter((t: TagOption) => !t.isSource);
-    setTags(buildTagsInDisplayOrder(categoryTags));
+    try {
+      const res = await fetch('/api/tags');
+      if (!res.ok) return;
+      const data = await res.json();
+      const categoryTags = data.filter((t: TagOption) => !t.isSource);
+      setTags(buildTagsInDisplayOrder(categoryTags));
+    } catch {
+      // non-critical
+    }
   }, []);
 
   useEffect(() => {
@@ -157,14 +172,20 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
   }, []);
 
   const handleAutoTag = async () => {
-    const params = new URLSearchParams({
-      start: period.start.toISOString(),
-      end: period.end.toISOString(),
-    });
-    const res = await fetch(`/api/auto-tag?${params}`, { method: 'POST' });
-    const data = await res.json();
-    setAutoTagResult(data);
-    void fetchTransactions();
+    try {
+      const params = new URLSearchParams({
+        start: period.start.toISOString(),
+        end: period.end.toISOString(),
+      });
+      const res = await fetch(`/api/auto-tag?${params}`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setAutoTagResult(data);
+        void fetchTransactions();
+      }
+    } catch {
+      // non-critical
+    }
   };
 
   const toggleUntaggedOnly = () => {
