@@ -7,7 +7,7 @@ Read `plans/dashboard-enhancement-plan.md` for the full architectural context be
 
 ---
 
-## Task 1 — Database Schema: Add IncomeSource, UntrackedCategory models
+## Task 1 — Database Schema: Add IncomeSource, UntrackedCategory models - COMPLETE
 
 **IMPORTANT:** USE MIGRATIONS TO PRESERVE DATA.
 
@@ -73,7 +73,7 @@ npx prisma migrate dev --name add_income_sources_and_untracked_categories
 
 ---
 
-## Task 2 — Types & Utilities
+## Task 2 — Types & Utilities - COMPLETE
 
 **Files to edit:** `src/types/index.ts`, `src/lib/date-utils.ts`
 
@@ -134,7 +134,7 @@ export type UntrackedCategoriesResponse = {
 
 ---
 
-## Task 3 — API: Income Sources CRUD
+## Task 3 — API: Income Sources CRUD - COMPLETE
 
 **Files to create:**
 
@@ -225,7 +225,7 @@ export async function DELETE(
 
 ---
 
-## Task 4 — API: Untracked Categories CRUD + Spending
+## Task 4 — API: Untracked Categories CRUD + Spending - COMPLETE
 
 **Files to create:**
 
@@ -257,7 +257,7 @@ Include `trulyUncategorizedTransactions` in the response (same format as the unt
 
 ---
 
-## Task 5 — API: Enhance Transactions Endpoint
+## Task 5 — API: Enhance Transactions Endpoint - COMPLETE
 
 **File to edit:** `src/app/api/transactions/route.ts`
 
@@ -265,7 +265,7 @@ Read the current file first. Add support for a `tagIds` query parameter (comma-s
 
 ---
 
-## Task 6 — Budget Page: IncomeSourceDialog component
+## Task 6 — Budget Page: IncomeSourceDialog component - COMPLETE
 
 **File to create:** `src/components/budget/income-source-dialog.tsx`
 
@@ -299,7 +299,7 @@ Requirements:
 
 ---
 
-## Task 7 — Budget Page: IncomeSourcesSection component
+## Task 7 — Budget Page: IncomeSourcesSection component - COMPLETE
 
 **File to create:** `src/components/budget/income-sources-section.tsx`
 
@@ -328,7 +328,7 @@ Requirements:
 
 ---
 
-## Task 8 — Budget Page: Wire IncomeSourcesSection
+## Task 8 — Budget Page: Wire IncomeSourcesSection - COMPLETE
 
 **File to edit:** `src/app/budget/page.tsx`
 
@@ -341,7 +341,7 @@ Read the full current file. Add the `IncomeSourcesSection` component to the budg
 
 ---
 
-## Task 9 — Dashboard: IncomeSourcesCard component (read-only)
+## Task 9 — Dashboard: IncomeSourcesCard component (read-only) - COMPLETE
 
 **File to create:** `src/components/dashboard/income-sources-card.tsx`
 
@@ -358,7 +358,7 @@ Requirements:
 
 ---
 
-## Task 10 — Dashboard: ExpensesTable component (read-only)
+## Task 10 — Dashboard: ExpensesTable component (read-only) - COMPLETE
 
 **File to create:** `src/components/dashboard/expenses-table.tsx`
 
@@ -386,7 +386,7 @@ Requirements:
 
 ---
 
-## Task 11 — Dashboard: UntrackedCategoryDialog component
+## Task 11 — Dashboard: UntrackedCategoryDialog component - COMPLETE
 
 **File to create:** `src/components/dashboard/untracked-category-dialog.tsx`
 
@@ -416,7 +416,7 @@ Requirements:
 
 ---
 
-## Task 12 — Dashboard: UntrackedCategoriesSection component
+## Task 12 — Dashboard: UntrackedCategoriesSection component - COMPLETE
 
 **File to create:** `src/components/dashboard/untracked-categories-section.tsx`
 
@@ -450,7 +450,7 @@ Requirements:
 
 ---
 
-## Task 13 — Dashboard: SpendingCharts component
+## Task 13 — Dashboard: SpendingCharts component - COMPLETE
 
 **File to create:** `src/components/dashboard/spending-charts.tsx`
 
@@ -491,7 +491,7 @@ Both charts:
 
 ---
 
-## Task 14 — Dashboard Page: Rebuild src/app/page.tsx
+## Task 14 — Dashboard Page: Rebuild src/app/page.tsx - COMPLETE
 
 **File to edit:** `src/app/page.tsx`
 

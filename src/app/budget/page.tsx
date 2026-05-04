@@ -24,6 +24,7 @@ import { BudgetLineDialog } from '@/components/budget/budget-line-dialog';
 import { BudgetCategoryDialog } from '@/components/budget/budget-category-dialog';
 import { BudgetSummaryCards } from '@/components/budget/budget-summary-cards';
 import { TagTransactionsPanel } from '@/components/budget/tag-transactions-panel';
+import { IncomeSourcesSection } from '@/components/budget/income-sources-section';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { BudgetSummaryLine, BudgetCategory, BudgetSummaryResponse, Budget } from '@/types';
 import { TransactionsTable } from '@/components/transactions/transactions-table';
@@ -559,6 +560,9 @@ export default function BudgetPage() {
         totalIncome={totalIncome}
         totalDebits={totalDebits}
       />
+
+      {/* Income Sources */}
+      <IncomeSourcesSection budgetId={activeBudget?.id ?? null} onRefresh={() => void refresh()} />
 
       {/* Budget Lines Table */}
       <div className="rounded-md border">

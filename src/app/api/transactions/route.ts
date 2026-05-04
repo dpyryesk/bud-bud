@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
   const rawPage = Number.parseInt(searchParams.get('page') || '1', 10);
   const rawLimit = Number.parseInt(searchParams.get('limit') || '50', 10);
   const tagId = searchParams.get('tagId');
+  const tagIdsParam = searchParams.get('tagIds');
   const untaggedOnly = searchParams.get('untaggedOnly') === 'true';
   const unbudgeted = searchParams.get('unbudgeted') === 'true';
   const search = searchParams.get('search')?.trim() ?? '';
@@ -68,6 +69,16 @@ export async function GET(request: NextRequest) {
     where.tags = {
       some: { tagId },
     };
+  } else if (tagIdsParam) {
+    const tagIds = tagIdsParam
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+    if (tagIds.length > 0) {
+      where.tags = {
+        some: { tagId: { in: tagIds } },
+      };
+    }
   }
 
   if (untaggedOnly) {

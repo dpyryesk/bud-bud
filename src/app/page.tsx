@@ -1,135 +1,180 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useTimePeriod } from '@/hooks/use-time-period';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeftRight, DollarSign, TrendingDown, TrendingUp } from 'lucide-react';
-import { formatCurrency } from '@/lib/date-utils';
-import { PieChart, Pie, ResponsiveContainer, Tooltip, Legend, Sector } from 'recharts';
+import { format } from 'date-fns';
 import Link from 'next/link';
-
-type DashboardData = {
-  totalIncome: number;
-  totalSpending: number;
-  net: number;
-  count: number;
-  spendingByTag: { name: string; color: string; amount: number }[];
-};
+import { useTimePeriod } from '@/hooks/use-time-period';
+import { getYearlyAmount } from '@/lib/date-utils';
+import { buildTagsInDisplayOrder } from '@/lib/tag-tree';
+import { IncomeSourcesCard } from '@/components/dashboard/income-sources-card';
+import { ExpensesTable } from '@/components/dashboard/expenses-table';
+import { UntrackedCategoriesSection } from '@/components/dashboard/untracked-categories-section';
+import { SpendingCharts } from '@/components/dashboard/spending-charts';
+import type {
+  BudgetSummaryResponse,
+  Budget,
+  BudgetSummaryLine,
+  BudgetCategory,
+  IncomeSource,
+  UntrackedCategoryWithSpending,
+} from '@/types';
+import type { TagOption, TagOptionWithLevel } from '@/components/budget/constants';
 
 export default function DashboardPage() {
   const { period } = useTimePeriod();
-  const [data, setData] = useState<DashboardData | null>(null);
 
-  const fetchData = useCallback(async () => {
-    const params = new URLSearchParams({
-      start: period.start.toISOString(),
-      end: period.end.toISOString(),
-    });
-    const res = await fetch(`/api/dashboard?${params}`);
-    setData(await res.json());
+  // Budget summary data
+  const [activeBudget, setActiveBudget] = useState<Budget | null>(null);
+  const [summaryLines, setSummaryLines] = useState<BudgetSummaryLine[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Income sources
+  const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
+
+  // Tags for UntrackedCategoryDialog
+  const [tags, setTags] = useState<TagOptionWithLevel[]>([]);
+
+  // Untracked categories (lifted from UntrackedCategoriesSection for charts)
+  const [untrackedCategories, setUntrackedCategories] = useState<UntrackedCategoryWithSpending[]>(
+    [],
+  );
+  const [totalTrulyUncategorized, setTotalTrulyUncategorized] = useState(0);
+
+  // ---- Derived values ----
+
+  const orderedCategories: BudgetCategory[] = [];
+  const seenCatIds = new Set<string>();
+  for (const line of summaryLines) {
+    if (line.budgetLine.category && !seenCatIds.has(line.budgetLine.category.id)) {
+      orderedCategories.push(line.budgetLine.category);
+      seenCatIds.add(line.budgetLine.category.id);
+    }
+  }
+  orderedCategories.sort((a, b) => a.order - b.order);
+
+  const totalYearlyNetIncome = incomeSources.reduce(
+    (sum, src) => sum + getYearlyAmount(src.netAmount, src.netPeriod),
+    0,
+  );
+
+  // ---- Data fetching ----
+
+  const fetchSummary = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        start: format(period.start, 'yyyy-MM-dd'),
+        end: format(period.end, 'yyyy-MM-dd'),
+      });
+      const res = await fetch(`/api/budget/summary?${params}`);
+      if (!res.ok) {
+        setSummaryLines([]);
+        setActiveBudget(null);
+        return;
+      }
+      const data = (await res.json()) as BudgetSummaryResponse;
+      setActiveBudget(data.activeBudget);
+      setSummaryLines(data.lines ?? []);
+    } finally {
+      setLoading(false);
+    }
   }, [period]);
 
+  const fetchIncomeSources = useCallback(async (budgetId: string) => {
+    const res = await fetch(`/api/income-sources?budgetId=${budgetId}`);
+    if (res.ok) {
+      setIncomeSources((await res.json()) as IncomeSource[]);
+    }
+  }, []);
+
+  const fetchTags = useCallback(async () => {
+    const res = await fetch('/api/tags');
+    if (!res.ok) return;
+    const data = (await res.json()) as TagOption[];
+    const categoryTags = data.filter((t) => !t.isSource);
+    setTags(buildTagsInDisplayOrder(categoryTags));
+  }, []);
+
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      void fetchData();
+    const id = setTimeout(() => {
+      void fetchSummary();
     }, 0);
-    return () => clearTimeout(timeoutId);
-  }, [fetchData]);
+    return () => clearTimeout(id);
+  }, [fetchSummary]);
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      if (!activeBudget) {
+        setIncomeSources([]);
+        return;
+      }
+      void fetchIncomeSources(activeBudget.id);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [activeBudget, fetchIncomeSources]);
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      void fetchTags();
+    }, 0);
+    return () => clearTimeout(id);
+  }, [fetchTags]);
+
+  const handleUntrackedDataChange = useCallback(
+    (categories: UntrackedCategoryWithSpending[], total: number) => {
+      setUntrackedCategories(categories);
+      setTotalTrulyUncategorized(total);
+    },
+    [],
+  );
+
+  // ---- Render ----
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Dashboard</h1>
       <p className="text-muted-foreground">Showing data for: {period.label}</p>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Income</CardTitle>
-            <TrendingUp className="text-muted-foreground h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(data?.totalIncome ?? 0)}
-            </div>
-            <p className="text-muted-foreground text-xs">Credits for the period</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Spending</CardTitle>
-            <TrendingDown className="text-muted-foreground h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(data?.totalSpending ?? 0)}</div>
-            <p className="text-muted-foreground text-xs">Debits for the period</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Net</CardTitle>
-            <DollarSign className="text-muted-foreground h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`text-2xl font-bold ${(data?.net ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}
-            >
-              {formatCurrency(data?.net ?? 0)}
-            </div>
-            <p className="text-muted-foreground text-xs">Income minus spending</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Transactions</CardTitle>
-            <ArrowLeftRight className="text-muted-foreground h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data?.count ?? 0}</div>
-            <p className="text-muted-foreground text-xs">Total for the period</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {data?.spendingByTag && data.spendingByTag.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Spending by Tag</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-75">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={data.spendingByTag}
-                    dataKey="amount"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    shape={(props) => <Sector {...props} fill={props.payload.color} />}
-                    label={({ name, percent }) => `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`}
-                  />
-                  <Tooltip formatter={(value: unknown) => formatCurrency(value as number)} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
+      {!loading && !activeBudget ? (
         <div className="text-muted-foreground rounded-lg border border-dashed p-8 text-center">
-          <p>Import some transactions to get started!</p>
+          <p className="font-medium">No budget configured.</p>
           <p className="mt-1 text-sm">
             Go to{' '}
-            <Link href="/import" className="text-primary underline">
-              Import
+            <Link href="/budgets" className="text-primary underline">
+              Budgets
             </Link>{' '}
-            to upload a CSV file from your bank.
+            to create a budget and start tracking your finances.
           </p>
         </div>
+      ) : (
+        <>
+          {/* 1. Expected Income */}
+          <IncomeSourcesCard incomeSources={incomeSources} />
+
+          {/* 2. Table of Expenses */}
+          <ExpensesTable
+            summaryLines={summaryLines}
+            orderedCategories={orderedCategories}
+            totalYearlyNetIncome={totalYearlyNetIncome}
+          />
+
+          {/* 3. Untracked Categories */}
+          <UntrackedCategoriesSection
+            budgetId={activeBudget?.id ?? null}
+            period={period}
+            totalYearlyNetIncome={totalYearlyNetIncome}
+            availableTags={tags}
+            onDataChange={handleUntrackedDataChange}
+          />
+
+          {/* 4. Charts */}
+          <SpendingCharts
+            summaryLines={summaryLines}
+            orderedCategories={orderedCategories}
+            untrackedCategories={untrackedCategories}
+            totalTrulyUncategorized={totalTrulyUncategorized}
+          />
+        </>
       )}
     </div>
   );

@@ -83,6 +83,34 @@ export type BudgetSummaryResponse = {
   totalDebits: number;
 };
 
+// ---- Income & Untracked types ----
+
+export type IncomeSource = {
+  id: string;
+  budgetId: string;
+  name: string;
+  netAmount: number;
+  netPeriod: BudgetPeriodType;
+  grossAmount: number | null;
+  grossPeriod: BudgetPeriodType | null;
+  order: number;
+};
+
+export type UntrackedCategoryWithSpending = {
+  id: string;
+  budgetId: string;
+  name: string;
+  order: number;
+  tags: TagFlat[];
+  actualSpending: number;
+};
+
+export type UntrackedCategoriesResponse = {
+  categories: UntrackedCategoryWithSpending[];
+  totalTrulyUncategorized: number;
+  trulyUncategorizedTransactions: TransactionWithTags[];
+};
+
 // ---- CSV Import types ----
 
 export type CsvMappingConfig = {
