@@ -95,26 +95,31 @@ export async function GET(request: NextRequest) {
     orderBy: { date: 'desc' },
   });
 
-  // Filter to transactions not covered by any budget line ("untracked" transactions)
+  // Filter to transactions not covered by any budget line ("untracked" transactions).
+  // A transaction is untracked when it has NO non-source tags, OR when at least one
+  // non-source tag is NOT covered by any budget line.
   const untrackedTransactions = transactions.filter((tx) => {
     const nonSourceTagIds = tx.tags.filter((tt) => !tt.tag.isSource).map((tt) => tt.tag.id);
-    return nonSourceTagIds.length === 0 || !nonSourceTagIds.some((id) => allBudgetTagIds.has(id));
+    return nonSourceTagIds.length === 0 || nonSourceTagIds.some((id) => !allBudgetTagIds.has(id));
   });
 
-  // For each untracked category, find matching transactions and compute spending
+  // Assign each untracked transaction to the FIRST matching category (by order).
+  // Using first-match prevents double-counting when category tag sets overlap.
   const categorySpending = new Map<string, number>();
   const matchedTransactionIds = new Set<string>();
 
-  for (const { categoryId, tagIds } of categoryExpandedTagIds) {
-    let spending = 0;
-    for (const tx of untrackedTransactions) {
-      const nonSourceTagIds = tx.tags.filter((tt) => !tt.tag.isSource).map((tt) => tt.tag.id);
-      if (nonSourceTagIds.some((id) => tagIds.has(id))) {
-        spending += tx.debit;
-        matchedTransactionIds.add(tx.id);
-      }
+  for (const tx of untrackedTransactions) {
+    const nonSourceTagIds = tx.tags.filter((tt) => !tt.tag.isSource).map((tt) => tt.tag.id);
+    const match = categoryExpandedTagIds.find(({ tagIds }) =>
+      nonSourceTagIds.some((id) => tagIds.has(id)),
+    );
+    if (match) {
+      categorySpending.set(
+        match.categoryId,
+        (categorySpending.get(match.categoryId) ?? 0) + tx.debit,
+      );
+      matchedTransactionIds.add(tx.id);
     }
-    categorySpending.set(categoryId, spending);
   }
 
   // "Truly uncategorized" transactions = untracked and not matched by any category

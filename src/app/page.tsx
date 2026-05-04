@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { format } from 'date-fns';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { format, startOfYear, endOfYear } from 'date-fns';
 import Link from 'next/link';
 import { useTimePeriod } from '@/hooks/use-time-period';
 import { getYearlyAmount } from '@/lib/date-utils';
@@ -20,6 +20,17 @@ import type { TagOption, TagOptionWithLevel } from '@/components/budget/constant
 
 export default function DashboardPage() {
   const { period } = useTimePeriod();
+
+  // Always operate on the full calendar year of the selected period
+  const yearPeriod = useMemo(() => {
+    const yr = period.start.getFullYear();
+    return {
+      start: startOfYear(period.start),
+      end: endOfYear(period.start),
+      label: String(yr),
+      type: 'year' as const,
+    };
+  }, [period]);
 
   // Budget summary data
   const [activeBudget, setActiveBudget] = useState<Budget | null>(null);
@@ -60,8 +71,8 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        start: format(period.start, 'yyyy-MM-dd'),
-        end: format(period.end, 'yyyy-MM-dd'),
+        start: format(yearPeriod.start, 'yyyy-MM-dd'),
+        end: format(yearPeriod.end, 'yyyy-MM-dd'),
       });
       const res = await fetch(`/api/budget/summary?${params}`);
       if (!res.ok) {
@@ -75,7 +86,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [period]);
+  }, [yearPeriod]);
 
   const fetchIncomeSources = useCallback(async (budgetId: string) => {
     const res = await fetch(`/api/income-sources?budgetId=${budgetId}`);
@@ -122,7 +133,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Dashboard</h1>
-      <p className="text-muted-foreground">Showing data for: {period.label}</p>
+      <p className="text-muted-foreground">Showing data for: {yearPeriod.label}</p>
 
       {!loading && !activeBudget ? (
         <div className="text-muted-foreground rounded-lg border border-dashed p-8 text-center">
@@ -145,13 +156,12 @@ export default function DashboardPage() {
             summaryLines={summaryLines}
             orderedCategories={orderedCategories}
             totalYearlyNetIncome={totalYearlyNetIncome}
-            onLineUpdated={fetchSummary}
           />
 
           {/* 3. Untracked Categories */}
           <UntrackedCategoriesSection
             budgetId={activeBudget?.id ?? null}
-            period={period}
+            period={yearPeriod}
             totalYearlyNetIncome={totalYearlyNetIncome}
             availableTags={tags}
           />

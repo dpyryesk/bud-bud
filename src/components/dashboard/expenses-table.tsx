@@ -1,16 +1,7 @@
 'use client';
 
-import { Fragment, useState, useRef } from 'react';
+import { Fragment } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { cn } from '@/lib/utils';
 import { formatCurrency, getYearlyAmount } from '@/lib/date-utils';
 import type { BudgetSummaryLine, BudgetCategory } from '@/types';
 
@@ -18,7 +9,6 @@ interface ExpensesTableProps {
   summaryLines: BudgetSummaryLine[];
   orderedCategories: BudgetCategory[];
   totalYearlyNetIncome: number;
-  onLineUpdated?: () => Promise<void>;
 }
 
 const PERIOD_LABEL: Record<string, string> = {
@@ -36,125 +26,17 @@ interface LineRowProps {
   line: BudgetSummaryLine;
   totalYearlyBudget: number;
   totalYearlyNetIncome: number;
-  onLineUpdated?: () => Promise<void>;
 }
 
-function LineRow({ line, totalYearlyBudget, totalYearlyNetIncome, onLineUpdated }: LineRowProps) {
+function LineRow({ line, totalYearlyBudget, totalYearlyNetIncome }: LineRowProps) {
   const { budgetLine } = line;
-  const [editingAmount, setEditingAmount] = useState(false);
-  const [draftAmount, setDraftAmount] = useState(budgetLine.amount.toFixed(2));
-  const [saving, setSaving] = useState(false);
-  // Prevents duplicate PUT when Enter fires both onKeyDown and onBlur
-  const commitInProgress = useRef(false);
-
   const yearlyAmount = getYearlyAmount(budgetLine.amount, budgetLine.period);
 
-  const saveAmount = async () => {
-    if (commitInProgress.current) return;
-    commitInProgress.current = true;
-    setEditingAmount(false);
-    const parsed = parseFloat(draftAmount);
-    if (isNaN(parsed) || parsed < 0 || parsed === budgetLine.amount) {
-      setDraftAmount(budgetLine.amount.toFixed(2));
-      commitInProgress.current = false;
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/budget-lines/${budgetLine.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: parsed }),
-      });
-      if (res.ok) await onLineUpdated?.();
-    } finally {
-      setSaving(false);
-      commitInProgress.current = false;
-    }
-  };
-
-  const savePeriod = async (newPeriod: string) => {
-    if (newPeriod === budgetLine.period) return;
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/budget-lines/${budgetLine.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ period: newPeriod }),
-      });
-      if (res.ok) await onLineUpdated?.();
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
-    <tr className={cn('border-b text-sm last:border-0', saving && 'opacity-60')}>
+    <tr className="border-b text-sm last:border-0">
       <td className="py-1.5 pr-4 pl-6">{budgetLine.name}</td>
-      <td className="py-1.5 pr-2 text-right tabular-nums">
-        {editingAmount ? (
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
-            value={draftAmount}
-            onChange={(e) => setDraftAmount(e.target.value)}
-            onBlur={() => void saveAmount()}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                void saveAmount();
-              }
-              if (e.key === 'Escape') {
-                commitInProgress.current = true; // suppress onBlur save
-                setDraftAmount(budgetLine.amount.toFixed(2));
-                setEditingAmount(false);
-                // reset after blur fires
-                setTimeout(() => {
-                  commitInProgress.current = false;
-                }, 0);
-              }
-            }}
-            autoFocus
-            className="h-7 w-28 text-right text-sm"
-          />
-        ) : (
-          <button
-            type="button"
-            title={`Edit base amount (${formatCurrency(budgetLine.amount)} per ${budgetLine.period})`}
-            className={cn(
-              'hover:bg-muted rounded px-1 text-right tabular-nums transition-colors',
-              saving && 'pointer-events-none',
-            )}
-            onClick={() => {
-              setDraftAmount(budgetLine.amount.toFixed(2));
-              setEditingAmount(true);
-            }}
-          >
-            {formatCurrency(budgetLine.amount)}
-          </button>
-        )}
-      </td>
-      <td className="py-1 pr-4">
-        <Select
-          value={budgetLine.period}
-          onValueChange={(v) => {
-            if (v !== null) void savePeriod(v);
-          }}
-          disabled={saving}
-        >
-          <SelectTrigger size="sm" className="w-28">
-            <SelectValue>
-              {(value: string | null) => PERIOD_LABEL[value ?? ''] ?? value ?? '—'}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="monthly">Monthly</SelectItem>
-            <SelectItem value="biweekly">Bi-weekly</SelectItem>
-            <SelectItem value="yearly">Yearly</SelectItem>
-          </SelectContent>
-        </Select>
-      </td>
+      <td className="py-1.5 pr-2 text-right tabular-nums">{formatCurrency(budgetLine.amount)}</td>
+      <td className="py-1.5 pr-4">{PERIOD_LABEL[budgetLine.period] ?? budgetLine.period}</td>
       <td className="py-1.5 pr-4 text-right tabular-nums">{formatCurrency(yearlyAmount)}</td>
       <td className="py-1.5 pr-4 text-right tabular-nums">
         {pct(yearlyAmount, totalYearlyBudget)}
@@ -197,7 +79,6 @@ export function ExpensesTable({
   summaryLines,
   orderedCategories,
   totalYearlyNetIncome,
-  onLineUpdated,
 }: ExpensesTableProps) {
   const totalYearlyBudget = summaryLines.reduce(
     (sum, l) => sum + getYearlyAmount(l.budgetLine.amount, l.budgetLine.period),
@@ -252,7 +133,6 @@ export function ExpensesTable({
                           line={line}
                           totalYearlyBudget={totalYearlyBudget}
                           totalYearlyNetIncome={totalYearlyNetIncome}
-                          onLineUpdated={onLineUpdated}
                         />
                       ))}
                       <CategorySubtotals
@@ -280,7 +160,6 @@ export function ExpensesTable({
                         line={line}
                         totalYearlyBudget={totalYearlyBudget}
                         totalYearlyNetIncome={totalYearlyNetIncome}
-                        onLineUpdated={onLineUpdated}
                       />
                     ))}
                     <CategorySubtotals
