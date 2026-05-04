@@ -191,6 +191,23 @@ export function formatPeriodLabel(period: TimePeriod): string {
 }
 
 /**
+ * Convert a budget amount to its yearly equivalent.
+ * monthly × 12, biweekly × 26, yearly × 1.
+ */
+export function getYearlyAmount(amount: number, period: BudgetPeriodType): number {
+  switch (period) {
+    case 'monthly':
+      return amount * 12;
+    case 'biweekly':
+      return amount * 26;
+    case 'yearly':
+      return amount;
+    default:
+      return amount;
+  }
+}
+
+/**
  * Format currency amount.
  */
 export function formatCurrency(amount: number): string {
