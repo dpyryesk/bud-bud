@@ -1,11 +1,13 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { formatCurrency, getYearlyAmount } from '@/lib/date-utils';
 import type { IncomeSource } from '@/types';
 
 interface IncomeSourcesCardProps {
   incomeSources: IncomeSource[];
+  totalYearlyBudget: number;
 }
 
 const PERIOD_LABEL: Record<string, string> = {
@@ -14,8 +16,9 @@ const PERIOD_LABEL: Record<string, string> = {
   yearly: 'Yearly',
 };
 
-export function IncomeSourcesCard({ incomeSources }: IncomeSourcesCardProps) {
+export function IncomeSourcesCard({ incomeSources, totalYearlyBudget }: IncomeSourcesCardProps) {
   const hasGross = incomeSources.some((s) => s.grossAmount !== null);
+  const colCount = hasGross ? 7 : 4;
   const totalYearlyNet = incomeSources.reduce(
     (sum, s) => sum + getYearlyAmount(s.netAmount, s.netPeriod),
     0,
@@ -23,6 +26,9 @@ export function IncomeSourcesCard({ incomeSources }: IncomeSourcesCardProps) {
   const totalYearlyGross = incomeSources
     .filter((s) => s.grossAmount !== null)
     .reduce((sum, s) => sum + getYearlyAmount(s.grossAmount!, s.grossPeriod ?? s.netPeriod), 0);
+
+  const difference = totalYearlyNet - totalYearlyBudget;
+  const isOverBudget = difference < 0;
 
   return (
     <Card>
@@ -87,6 +93,7 @@ export function IncomeSourcesCard({ incomeSources }: IncomeSourcesCardProps) {
                     )}
                   </tr>
                 ))}
+
                 {/* Totals row */}
                 <tr className="bg-muted/30 font-semibold">
                   <td className="py-2 pr-4">Total</td>
@@ -101,6 +108,32 @@ export function IncomeSourcesCard({ incomeSources }: IncomeSourcesCardProps) {
                     </>
                   )}
                 </tr>
+
+                {/* Budget summary rows (only when a budget is configured) */}
+                {totalYearlyBudget > 0 && (
+                  <>
+                    <tr className="border-t font-semibold">
+                      <td className="py-2 pr-4">Total Budget</td>
+                      <td colSpan={colCount - 2} className="py-2 pr-4" />
+                      <td className="py-2 pr-4 tabular-nums">
+                        {formatCurrency(totalYearlyBudget)}
+                      </td>
+                    </tr>
+                    <tr
+                      className={cn(
+                        'font-semibold',
+                        isOverBudget ? 'text-destructive' : 'text-green-600 dark:text-green-400',
+                      )}
+                    >
+                      <td className="py-2 pr-4">Difference (Income − Budget)</td>
+                      <td colSpan={colCount - 2} className="py-2 pr-4" />
+                      <td className="py-2 pr-4 tabular-nums">
+                        {difference >= 0 ? '+' : ''}
+                        {formatCurrency(difference)}
+                      </td>
+                    </tr>
+                  </>
+                )}
               </tbody>
             </table>
           </div>

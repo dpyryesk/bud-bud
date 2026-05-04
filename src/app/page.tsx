@@ -9,14 +9,12 @@ import { buildTagsInDisplayOrder } from '@/lib/tag-tree';
 import { IncomeSourcesCard } from '@/components/dashboard/income-sources-card';
 import { ExpensesTable } from '@/components/dashboard/expenses-table';
 import { UntrackedCategoriesSection } from '@/components/dashboard/untracked-categories-section';
-import { SpendingCharts } from '@/components/dashboard/spending-charts';
 import type {
   BudgetSummaryResponse,
   Budget,
   BudgetSummaryLine,
   BudgetCategory,
   IncomeSource,
-  UntrackedCategoryWithSpending,
 } from '@/types';
 import type { TagOption, TagOptionWithLevel } from '@/components/budget/constants';
 
@@ -34,12 +32,6 @@ export default function DashboardPage() {
   // Tags for UntrackedCategoryDialog
   const [tags, setTags] = useState<TagOptionWithLevel[]>([]);
 
-  // Untracked categories (lifted from UntrackedCategoriesSection for charts)
-  const [untrackedCategories, setUntrackedCategories] = useState<UntrackedCategoryWithSpending[]>(
-    [],
-  );
-  const [totalTrulyUncategorized, setTotalTrulyUncategorized] = useState(0);
-
   // ---- Derived values ----
 
   const orderedCategories: BudgetCategory[] = [];
@@ -54,6 +46,11 @@ export default function DashboardPage() {
 
   const totalYearlyNetIncome = incomeSources.reduce(
     (sum, src) => sum + getYearlyAmount(src.netAmount, src.netPeriod),
+    0,
+  );
+
+  const totalYearlyBudget = summaryLines.reduce(
+    (sum, l) => sum + getYearlyAmount(l.budgetLine.amount, l.budgetLine.period),
     0,
   );
 
@@ -120,14 +117,6 @@ export default function DashboardPage() {
     return () => clearTimeout(id);
   }, [fetchTags]);
 
-  const handleUntrackedDataChange = useCallback(
-    (categories: UntrackedCategoryWithSpending[], total: number) => {
-      setUntrackedCategories(categories);
-      setTotalTrulyUncategorized(total);
-    },
-    [],
-  );
-
   // ---- Render ----
 
   return (
@@ -149,13 +138,14 @@ export default function DashboardPage() {
       ) : (
         <>
           {/* 1. Expected Income */}
-          <IncomeSourcesCard incomeSources={incomeSources} />
+          <IncomeSourcesCard incomeSources={incomeSources} totalYearlyBudget={totalYearlyBudget} />
 
           {/* 2. Table of Expenses */}
           <ExpensesTable
             summaryLines={summaryLines}
             orderedCategories={orderedCategories}
             totalYearlyNetIncome={totalYearlyNetIncome}
+            onLineUpdated={fetchSummary}
           />
 
           {/* 3. Untracked Categories */}
@@ -164,15 +154,6 @@ export default function DashboardPage() {
             period={period}
             totalYearlyNetIncome={totalYearlyNetIncome}
             availableTags={tags}
-            onDataChange={handleUntrackedDataChange}
-          />
-
-          {/* 4. Charts */}
-          <SpendingCharts
-            summaryLines={summaryLines}
-            orderedCategories={orderedCategories}
-            untrackedCategories={untrackedCategories}
-            totalTrulyUncategorized={totalTrulyUncategorized}
           />
         </>
       )}

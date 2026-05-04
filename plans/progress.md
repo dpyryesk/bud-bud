@@ -12,5 +12,5 @@
 [x] Build budget line management — CRUD API + form UI
 [x] Build budget view — calculations with scaling, rollup, split, rollover + display
 [x] Add categories to the budget view — budget lines grouped by category, subtotals for each category, drag-and-drop reordering of categories and budget lines
-[ ] Build dashboard + charts with recharts
+[x] Build dashboard + charts with recharts
 [ ] Polish — error handling, loading states, responsive design, edge cases
