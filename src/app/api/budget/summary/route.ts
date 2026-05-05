@@ -206,7 +206,12 @@ export async function GET(request: NextRequest) {
   for (const bl of budgetLines) {
     const period = bl.period as BudgetPeriodType;
     const tagSet = budgetLineTagSets.get(bl.id)!;
-    const scaledBudget = scaleBudgetAmount(bl.amount, period, viewPeriod);
+    const scaledBudget = scaleBudgetAmount(
+      bl.amount,
+      period,
+      viewPeriod,
+      applicableBudget.startDate,
+    );
     const actualSpending = budgetActuals.get(bl.id) ?? 0;
 
     let rolloverAmount = 0;
@@ -222,15 +227,16 @@ export async function GET(request: NextRequest) {
         period,
         lineRolloverStart,
         viewPeriod.start,
+        applicableBudget.startDate,
       );
 
       for (const p of completePeriods) {
-        const periodBudget = scaleBudgetAmount(bl.amount, period, {
-          start: p.start,
-          end: p.end,
-          label: '',
-          type: 'custom',
-        });
+        const periodBudget = scaleBudgetAmount(
+          bl.amount,
+          period,
+          { start: p.start, end: p.end, label: '', type: 'custom' },
+          applicableBudget.startDate,
+        );
 
         // Filter already-loaded historical transactions to this sub-period
         const periodTxs = historicalTxs.filter((tx) => tx.date >= p.start && tx.date <= p.end);
