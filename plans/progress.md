@@ -15,6 +15,6 @@
 [x] Build dashboard + charts with recharts
 [x] Polish — error handling, loading states, responsive design, edge cases
 [x] Add advanced filtering to the transactions view
-[ ] Handle bi-weekly periods (there can be two or three per month)
-[ ] Update README with screenshots and instructions
+[x] Handle bi-weekly periods (there can be two or three per month)
+[x] Update README with screenshots and instructions
 [ ] Add a changelog
