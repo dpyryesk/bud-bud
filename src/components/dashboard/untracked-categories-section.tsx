@@ -22,6 +22,7 @@ interface UntrackedCategoriesSectionProps {
   period: TimePeriod;
   totalYearlyNetIncome: number;
   availableTags: TagOptionWithLevel[];
+  title?: string;
   onDataChange?: (
     categories: UntrackedCategoryWithSpending[],
     totalTrulyUncategorized: number,
@@ -38,6 +39,7 @@ export function UntrackedCategoriesSection({
   period,
   totalYearlyNetIncome,
   availableTags,
+  title = 'Untracked Spending',
   onDataChange,
 }: UntrackedCategoriesSectionProps) {
   const [categories, setCategories] = useState<UntrackedCategoryWithSpending[]>([]);
@@ -139,7 +141,7 @@ export function UntrackedCategoriesSection({
     <>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Untracked Spending</CardTitle>
+          <CardTitle>{title}</CardTitle>
           <Button
             size="sm"
             onClick={() => {

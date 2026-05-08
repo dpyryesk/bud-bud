@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, startOfYear, endOfYear } from 'date-fns';
 import {
   DndContext,
   closestCenter,
@@ -22,16 +22,27 @@ import { SortableCategorySection } from '@/components/budget/sortable-category-s
 import { UncategorizedSection } from '@/components/budget/uncategorized-section';
 import { BudgetLineDialog } from '@/components/budget/budget-line-dialog';
 import { BudgetCategoryDialog } from '@/components/budget/budget-category-dialog';
-import { BudgetSummaryCards } from '@/components/budget/budget-summary-cards';
 import { TagTransactionsPanel } from '@/components/budget/tag-transactions-panel';
 import { IncomeSourcesSection } from '@/components/budget/income-sources-section';
+import { UntrackedCategoriesSection } from '@/components/dashboard/untracked-categories-section';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { BudgetSummaryLine, BudgetCategory, BudgetSummaryResponse, Budget } from '@/types';
 import { TransactionsTable } from '@/components/transactions/transactions-table';
-import { formatIsoDateForDisplay } from '@/lib/date-utils';
+import { formatIsoDateForDisplay, getYearlyAmount } from '@/lib/date-utils';
 
 export default function BudgetPage() {
   const { period } = useTimePeriod();
+
+  // Full calendar year of the selected period — used for yearly untracked section
+  const yearPeriod = useMemo(() => {
+    const yr = period.start.getFullYear();
+    return {
+      start: startOfYear(period.start),
+      end: endOfYear(period.start),
+      label: String(yr),
+      type: 'year' as const,
+    };
+  }, [period]);
 
   // Raw data from API
   const [summaryLines, setSummaryLines] = useState<BudgetSummaryLine[]>([]);
@@ -41,14 +52,8 @@ export default function BudgetPage() {
   const [importingTags, setImportingTags] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
-  // Untracked spending
-  const [totalUntracked, setTotalUntracked] = useState(0);
-
-  // Total income (sum of all credits for the period)
-  const [totalIncome, setTotalIncome] = useState(0);
-
-  // Total debits (raw sum of all debit transactions for the period)
-  const [totalDebits, setTotalDebits] = useState(0);
+  // Yearly net income — updated via IncomeSourcesSection callback
+  const [totalYearlyNetIncome, setTotalYearlyNetIncome] = useState(0);
 
   // Ordered display state (managed locally for drag-and-drop)
   const [orderedCategories, setOrderedCategories] = useState<BudgetCategory[]>([]);
@@ -103,8 +108,6 @@ export default function BudgetPage() {
       if (!res.ok) {
         setSummaryLines([]);
         setActiveBudget(null);
-        setTotalIncome(0);
-        setTotalDebits(0);
         return {
           activeBudget: null,
           lines: [],
@@ -115,14 +118,10 @@ export default function BudgetPage() {
       const data: BudgetSummaryResponse = await res.json();
       setSummaryLines(data.lines);
       setActiveBudget(data.activeBudget);
-      setTotalIncome(data.totalIncome ?? 0);
-      setTotalDebits(data.totalDebits ?? 0);
       return data;
     } catch {
       setSummaryLines([]);
       setActiveBudget(null);
-      setTotalIncome(0);
-      setTotalDebits(0);
       return {
         activeBudget: null,
         lines: [],
@@ -131,21 +130,6 @@ export default function BudgetPage() {
       } as BudgetSummaryResponse;
     } finally {
       setLoading(false);
-    }
-  }, [period]);
-
-  const fetchUntracked = useCallback(async () => {
-    try {
-      const params = new URLSearchParams({
-        start: format(period.start, 'yyyy-MM-dd'),
-        end: format(period.end, 'yyyy-MM-dd'),
-      });
-      const res = await fetch(`/api/budget/untracked?${params}`);
-      if (!res.ok) return;
-      const data: { totalUntracked: number } = await res.json();
-      setTotalUntracked(data.totalUntracked);
-    } catch {
-      // non-critical
     }
   }, [period]);
 
@@ -162,7 +146,6 @@ export default function BudgetPage() {
   }, []);
 
   const refresh = useCallback(async () => {
-    void fetchUntracked();
     const summary = await fetchSummary();
     const lines = summary.lines;
     const cats = await fetchCategories(summary.activeBudget?.id ?? null);
@@ -179,7 +162,7 @@ export default function BudgetPage() {
         .filter((l) => l.budgetLine.categoryId === null)
         .sort((a, b) => a.budgetLine.order - b.budgetLine.order),
     );
-  }, [fetchCategories, fetchSummary, fetchUntracked]);
+  }, [fetchCategories, fetchSummary]);
 
   const parseErrorMessage = useCallback(async (res: Response) => {
     try {
@@ -497,9 +480,10 @@ export default function BudgetPage() {
 
   // ---- Totals ----
 
-  const totalBudget = summaryLines.reduce((s, l) => s + l.scaledBudget, 0);
-  const totalActual = summaryLines.reduce((s, l) => s + l.actualSpending, 0);
-  const totalRemaining = summaryLines.reduce((s, l) => s + l.remaining, 0);
+  const totalYearlyBudget = summaryLines.reduce(
+    (s, l) => s + getYearlyAmount(l.budgetLine.amount, l.budgetLine.period),
+    0,
+  );
 
   const allLineIds = [
     ...orderedCategories.flatMap((c) => (groupedLines[c.id] ?? []).map((l) => l.budgetLine.id)),
@@ -579,18 +563,13 @@ export default function BudgetPage() {
         </p>
       )}
 
-      {/* Summary Cards */}
-      <BudgetSummaryCards
-        totalBudget={totalBudget}
-        totalActual={totalActual}
-        totalRemaining={totalRemaining}
-        totalUntracked={totalUntracked}
-        totalIncome={totalIncome}
-        totalDebits={totalDebits}
-      />
-
       {/* Income Sources */}
-      <IncomeSourcesSection budgetId={activeBudget?.id ?? null} onRefresh={() => void refresh()} />
+      <IncomeSourcesSection
+        budgetId={activeBudget?.id ?? null}
+        totalYearlyBudget={totalYearlyBudget}
+        onRefresh={() => void refresh()}
+        onTotalYearlyNetChange={setTotalYearlyNetIncome}
+      />
 
       {/* Budget Lines Table */}
       <div className="rounded-md border">
@@ -662,6 +641,15 @@ export default function BudgetPage() {
           </DndContext>
         )}
       </div>
+
+      {/* Yearly Untracked Spending */}
+      <UntrackedCategoriesSection
+        budgetId={activeBudget?.id ?? null}
+        period={yearPeriod}
+        totalYearlyNetIncome={totalYearlyNetIncome}
+        availableTags={tags}
+        title="Yearly Untracked Spending"
+      />
 
       {/* Untracked Transactions */}
       <Card>

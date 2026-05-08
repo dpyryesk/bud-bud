@@ -5,15 +5,23 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency, getYearlyAmount } from '@/lib/date-utils';
+import { cn } from '@/lib/utils';
 import { IncomeSourceDialog } from './income-source-dialog';
 import type { IncomeSource } from '@/types';
 
 interface IncomeSourcesSectionProps {
   budgetId: string | null;
+  totalYearlyBudget?: number;
   onRefresh?: () => void;
+  onTotalYearlyNetChange?: (total: number) => void;
 }
 
-export function IncomeSourcesSection({ budgetId, onRefresh }: IncomeSourcesSectionProps) {
+export function IncomeSourcesSection({
+  budgetId,
+  totalYearlyBudget,
+  onRefresh,
+  onTotalYearlyNetChange,
+}: IncomeSourcesSectionProps) {
   const [sources, setSources] = useState<IncomeSource[]>([]);
   const [loading, setLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -85,6 +93,15 @@ export function IncomeSourcesSection({ budgetId, onRefresh }: IncomeSourcesSecti
     .filter((s) => s.grossAmount !== null)
     .reduce((sum, s) => sum + getYearlyAmount(s.grossAmount!, s.grossPeriod ?? s.netPeriod), 0);
   const hasGross = sources.some((s) => s.grossAmount !== null);
+
+  useEffect(() => {
+    onTotalYearlyNetChange?.(totalYearlyNet);
+  }, [totalYearlyNet, onTotalYearlyNetChange]);
+
+  const colCount = hasGross ? 8 : 5; // name + net + period + yearlyNet + [gross + period + yearlyGross] + actions
+  const difference =
+    totalYearlyBudget !== undefined ? totalYearlyNet - totalYearlyBudget : undefined;
+  const isOverBudget = difference !== undefined && difference < 0;
 
   const periodLabel = (p: string) => {
     switch (p) {
@@ -220,6 +237,33 @@ export function IncomeSourcesSection({ budgetId, onRefresh }: IncomeSourcesSecti
                   )}
                   <td className="py-2" />
                 </tr>
+
+                {/* Budget comparison rows — only shown when totalYearlyBudget is provided */}
+                {totalYearlyBudget !== undefined && totalYearlyBudget > 0 && (
+                  <>
+                    <tr className="border-t font-semibold">
+                      <td className="py-2 pr-4">Total Budget</td>
+                      <td colSpan={colCount - 2} className="py-2 pr-4" />
+                      <td className="py-2 pr-4 tabular-nums">
+                        {formatCurrency(totalYearlyBudget)}
+                      </td>
+                    </tr>
+                    <tr
+                      className={cn(
+                        'font-semibold',
+                        isOverBudget ? 'text-destructive' : 'text-green-600 dark:text-green-400',
+                      )}
+                    >
+                      <td className="py-2 pr-4">Difference (Income − Budget)</td>
+                      <td colSpan={colCount - 2} className="py-2 pr-4" />
+                      <td className="py-2 pr-4 tabular-nums">
+                        {difference !== undefined
+                          ? `${difference >= 0 ? '+' : ''}${formatCurrency(difference)}`
+                          : '—'}
+                      </td>
+                    </tr>
+                  </>
+                )}
               </tbody>
             </table>
           </div>
