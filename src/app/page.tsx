@@ -190,7 +190,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="border-primary border-l-[3px] pl-3">
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <p className="text-muted-foreground text-sm">Showing data for: {yearPeriod.label}</p>
       </div>

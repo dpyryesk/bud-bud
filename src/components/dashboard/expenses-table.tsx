@@ -107,12 +107,24 @@ export function ExpensesTable({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left">
-                  <th className="pr-4 pb-2 font-medium">Name</th>
-                  <th className="pr-4 pb-2 text-right font-medium">Amount</th>
-                  <th className="pr-4 pb-2 font-medium">Period</th>
-                  <th className="pr-4 pb-2 text-right font-medium">Yearly Total</th>
-                  <th className="pr-4 pb-2 text-right font-medium">% of Budget</th>
-                  <th className="pb-2 text-right font-medium">% of Income</th>
+                  <th className="text-muted-foreground pr-4 pb-2 text-xs font-semibold tracking-wide uppercase">
+                    Name
+                  </th>
+                  <th className="text-muted-foreground pr-4 pb-2 text-right text-xs font-semibold tracking-wide uppercase">
+                    Amount
+                  </th>
+                  <th className="text-muted-foreground pr-4 pb-2 text-xs font-semibold tracking-wide uppercase">
+                    Period
+                  </th>
+                  <th className="text-muted-foreground pr-4 pb-2 text-right text-xs font-semibold tracking-wide uppercase">
+                    Yearly Total
+                  </th>
+                  <th className="text-muted-foreground pr-4 pb-2 text-right text-xs font-semibold tracking-wide uppercase">
+                    % of Budget
+                  </th>
+                  <th className="text-muted-foreground pb-2 text-right text-xs font-semibold tracking-wide uppercase">
+                    % of Income
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -122,8 +134,11 @@ export function ExpensesTable({
                   return (
                     <Fragment key={cat.id}>
                       {/* Category header row */}
-                      <tr className="bg-muted/40">
-                        <td colSpan={6} className="px-3 py-1.5 text-sm font-semibold">
+                      <tr className="bg-muted/30">
+                        <td
+                          colSpan={6}
+                          className="border-primary/50 border-l-[3px] px-3 py-1.5 text-sm font-semibold"
+                        >
                           {cat.name}
                         </td>
                       </tr>
@@ -146,10 +161,10 @@ export function ExpensesTable({
 
                 {uncategorizedLines.length > 0 && (
                   <>
-                    <tr className="bg-muted/40">
+                    <tr className="bg-muted/30">
                       <td
                         colSpan={6}
-                        className="text-muted-foreground px-3 py-1.5 text-sm font-semibold"
+                        className="border-muted-foreground/30 text-muted-foreground border-l-[3px] px-3 py-1.5 text-sm font-semibold"
                       >
                         Uncategorized
                       </td>
@@ -171,7 +186,7 @@ export function ExpensesTable({
                 )}
 
                 {/* Grand total */}
-                <tr className="border-t font-bold">
+                <tr className="bg-muted/30 border-t-2 font-bold">
                   <td className="py-2 pr-4">Grand Total</td>
                   <td className="py-2 pr-4 text-right tabular-nums">
                     {formatCurrency(summaryLines.reduce((s, l) => s + l.scaledBudget, 0))}

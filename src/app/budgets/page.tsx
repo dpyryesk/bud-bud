@@ -106,7 +106,7 @@ export default function BudgetsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Budgets</h1>
+        <h1 className="border-primary border-l-[3px] pl-3 text-2xl font-semibold">Budgets</h1>
         <Button onClick={handleCreate}>
           <Plus className="mr-2 h-4 w-4" />
           New Budget

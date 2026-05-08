@@ -512,7 +512,7 @@ export default function BudgetPage() {
     <div className="space-y-6">
       {/* Page header */}
       <div className="flex items-center justify-between">
-        <div>
+        <div className="border-primary border-l-[3px] pl-3">
           <h1 className="text-2xl font-bold">Budget</h1>
           <p className="text-muted-foreground text-sm">Viewing: {period.label}</p>
           <p className="text-muted-foreground text-sm">
