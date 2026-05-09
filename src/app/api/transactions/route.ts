@@ -39,10 +39,13 @@ export async function GET(request: NextRequest) {
   const end = searchParams.get('end');
   const rawPage = Number.parseInt(searchParams.get('page') || '1', 10);
   const rawLimit = Number.parseInt(searchParams.get('limit') || '50', 10);
+  const nolimit = searchParams.get('nolimit') === 'true';
   const tagId = searchParams.get('tagId');
   const tagIdsParam = searchParams.get('tagIds');
   const untaggedOnly = searchParams.get('untaggedOnly') === 'true';
   const unbudgeted = searchParams.get('unbudgeted') === 'true';
+  const budgeted = searchParams.get('budgeted') === 'true';
+  const type = searchParams.get('type'); // 'debit' | 'credit'
   const search = searchParams.get('search')?.trim() ?? '';
   const minAmountVal = parseFloat(searchParams.get('minAmount') ?? '');
   const maxAmountVal = parseFloat(searchParams.get('maxAmount') ?? '');
@@ -52,7 +55,7 @@ export async function GET(request: NextRequest) {
   }
 
   const page = Math.max(1, rawPage);
-  const limit = Math.min(200, Math.max(1, rawLimit));
+  const limit = nolimit ? Number.MAX_SAFE_INTEGER : Math.min(200, Math.max(1, rawLimit));
 
   const where: Record<string, unknown> = {};
 
@@ -91,6 +94,13 @@ export async function GET(request: NextRequest) {
     };
   }
 
+  // ---- Transaction type filter (debit-only or credit-only) ----
+  if (type === 'debit') {
+    where.debit = { gt: 0 };
+  } else if (type === 'credit') {
+    where.credit = { gt: 0 };
+  }
+
   // ---- Amount range filter ----
   if (!Number.isNaN(minAmountVal) || !Number.isNaN(maxAmountVal)) {
     const debitCond: Record<string, number> = { gt: 0 };
@@ -106,11 +116,15 @@ export async function GET(request: NextRequest) {
     where.OR = [{ debit: debitCond }, { credit: creditCond }];
   }
 
-  // ---- Unbudgeted filter: transactions not covered by any budget line ----
-  // Cannot be expressed as a Prisma WHERE clause, so we fetch all matching rows
-  // and filter in memory (data is bounded to a single period).
-  // Constrained to debit transactions only, consistent with /api/budget/untracked.
-  if (unbudgeted) {
+  // ---- Budget-line filters (in-memory, debit transactions only) ----
+  // Both `unbudgeted` and `budgeted` require loading budget lines to determine coverage.
+  if (unbudgeted && budgeted) {
+    return NextResponse.json(
+      { error: 'budgeted and unbudgeted cannot both be true' },
+      { status: 400 },
+    );
+  }
+  if (unbudgeted || budgeted) {
     where.debit = { gt: 0 };
 
     const [budgetLines, allTags] = await Promise.all([
@@ -140,23 +154,55 @@ export async function GET(request: NextRequest) {
 
     const allTxs = await fetchAllMatching(where);
 
-    const filtered = allTxs.filter((tx) => {
-      const nonSourceTagIds = tx.tags.filter((tt) => !tt.tag.isSource).map((tt) => tt.tag.id);
-      return nonSourceTagIds.length === 0 || !nonSourceTagIds.some((id) => coveredTagIds.has(id));
-    });
+    const filtered = unbudgeted
+      ? allTxs.filter((tx) => {
+          const nonSourceTagIds = tx.tags.filter((tt) => !tt.tag.isSource).map((tt) => tt.tag.id);
+          return (
+            nonSourceTagIds.length === 0 || !nonSourceTagIds.some((id) => coveredTagIds.has(id))
+          );
+        })
+      : allTxs.filter((tx) => {
+          // budgeted=true: keep only transactions covered by at least one budget line tag
+          const nonSourceTagIds = tx.tags.filter((tt) => !tt.tag.isSource).map((tt) => tt.tag.id);
+          return nonSourceTagIds.length > 0 && nonSourceTagIds.some((id) => coveredTagIds.has(id));
+        });
 
     const total = filtered.length;
-    const paginated = filtered.slice((page - 1) * limit, page * limit);
+    const paginated = nolimit ? filtered : filtered.slice((page - 1) * limit, page * limit);
 
     return NextResponse.json({
       data: paginated.map(formatTransaction),
       total,
       page,
-      totalPages: Math.ceil(total / limit) || 1,
+      totalPages: nolimit ? 1 : Math.ceil(total / limit) || 1,
     });
   }
 
   // ---- Standard path ----
+  if (nolimit) {
+    const [transactions, total] = await Promise.all([
+      prisma.transaction.findMany({
+        where,
+        include: {
+          tags: {
+            include: {
+              tag: { select: { id: true, name: true, color: true, isSource: true } },
+            },
+          },
+        },
+        orderBy: { date: 'desc' },
+      }),
+      prisma.transaction.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      data: transactions.map(formatTransaction),
+      total,
+      page: 1,
+      totalPages: 1,
+    });
+  }
+
   const [transactions, total] = await Promise.all([
     prisma.transaction.findMany({
       where,

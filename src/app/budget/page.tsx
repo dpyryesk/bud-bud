@@ -60,6 +60,9 @@ export default function BudgetPage() {
   const [groupedLines, setGroupedLines] = useState<Record<string, BudgetSummaryLine[]>>({});
   const [uncategorizedLines, setUncategorizedLines] = useState<BudgetSummaryLine[]>([]);
 
+  // Collapsed category state
+  const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<Set<string>>(new Set());
+
   // Dialog state — dialogs own their form state internally
   const [lineDialogOpen, setLineDialogOpen] = useState(false);
   const [editingLine, setEditingLine] = useState<BudgetSummaryLine | null>(null);
@@ -306,6 +309,28 @@ export default function BudgetPage() {
       refresh,
     ],
   );
+
+  // ---- Collapse/expand handlers ----
+
+  const handleToggleCollapse = useCallback((catId: string) => {
+    setCollapsedCategoryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(catId)) {
+        next.delete(catId);
+      } else {
+        next.add(catId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleCollapseAll = useCallback(() => {
+    setCollapsedCategoryIds(new Set(orderedCategories.map((c) => c.id)));
+  }, [orderedCategories]);
+
+  const handleExpandAll = useCallback(() => {
+    setCollapsedCategoryIds(new Set());
+  }, []);
 
   // ---- Budget line actions ----
 
@@ -573,6 +598,18 @@ export default function BudgetPage() {
 
       {/* Budget Lines Table */}
       <div className="rounded-md border">
+        {/* Collapse / Expand All toolbar */}
+        {orderedCategories.length > 0 && !loading && (
+          <div className="flex justify-end gap-2 border-b px-3 py-1.5">
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleCollapseAll}>
+              Collapse All
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleExpandAll}>
+              Expand All
+            </Button>
+          </div>
+        )}
+
         {/* Column headers */}
         <div
           className={cn(
@@ -620,6 +657,8 @@ export default function BudgetPage() {
                   key={cat.id}
                   category={cat}
                   lines={groupedLines[cat.id] ?? []}
+                  isCollapsed={collapsedCategoryIds.has(cat.id)}
+                  onToggleCollapse={() => handleToggleCollapse(cat.id)}
                   onEditCategory={handleEditCategory}
                   onDeleteCategory={(id) => void handleDeleteCategory(id)}
                   onEditLine={handleEditLine}

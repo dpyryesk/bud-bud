@@ -6,10 +6,12 @@ import {
   TrendingDown,
   AlertCircle,
   ArrowDownCircle,
+  Scale,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
+import type { SummaryCardType } from '@/components/dashboard/summary-transactions-panel';
 
 interface BudgetSummaryCardsProps {
   totalBudget: number;
@@ -18,6 +20,7 @@ interface BudgetSummaryCardsProps {
   totalUntracked: number;
   totalIncome: number;
   totalDebits: number;
+  onCardClick?: (type: SummaryCardType) => void;
 }
 
 interface SummaryCardProps {
@@ -26,11 +29,27 @@ interface SummaryCardProps {
   subtitle?: string;
   icon: React.ReactNode;
   valueClassName?: string;
+  onClick?: () => void;
 }
 
-function SummaryCard({ title, value, subtitle, icon, valueClassName }: SummaryCardProps) {
+function SummaryCard({ title, value, subtitle, icon, valueClassName, onClick }: SummaryCardProps) {
   return (
-    <Card>
+    <Card
+      className={cn(onClick && 'cursor-pointer transition-shadow hover:shadow-md')}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+    >
       <CardHeader className="pb-1">
         <div className="flex items-center justify-between">
           <CardTitle className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
@@ -54,9 +73,12 @@ export function BudgetSummaryCards({
   totalUntracked,
   totalIncome,
   totalDebits,
+  onCardClick,
 }: BudgetSummaryCardsProps) {
+  const netBalance = totalIncome - totalDebits;
+
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
       <SummaryCard
         title="Total Budget"
         value={formatCurrency(totalBudget)}
@@ -67,12 +89,14 @@ export function BudgetSummaryCards({
         value={formatCurrency(totalDebits)}
         subtitle="Sum of all debits"
         icon={<CreditCard className="h-4 w-4" />}
+        onClick={onCardClick ? () => onCardClick('total-spending') : undefined}
       />
       <SummaryCard
         title="Tracked Spending"
         value={formatCurrency(totalActual)}
         subtitle="Across budget lines"
         icon={<CheckCircle2 className="h-4 w-4" />}
+        onClick={onCardClick ? () => onCardClick('tracked-spending') : undefined}
       />
       <SummaryCard
         title="Remaining"
@@ -92,6 +116,7 @@ export function BudgetSummaryCards({
         subtitle="No budget line assigned"
         icon={<AlertCircle className={cn('h-4 w-4', totalUntracked > 0 ? 'text-amber-500' : '')} />}
         valueClassName={totalUntracked > 0 ? 'text-amber-600' : ''}
+        onClick={onCardClick ? () => onCardClick('untracked-spending') : undefined}
       />
       <SummaryCard
         title="Total Income"
@@ -99,6 +124,20 @@ export function BudgetSummaryCards({
         subtitle="Sum of all credits"
         icon={<ArrowDownCircle className="text-primary h-4 w-4" />}
         valueClassName="text-primary"
+        onClick={onCardClick ? () => onCardClick('total-income') : undefined}
+      />
+      <SummaryCard
+        title="Net Balance"
+        value={formatCurrency(netBalance)}
+        subtitle="Income minus spending"
+        icon={
+          netBalance >= 0 ? (
+            <Scale className="text-primary h-4 w-4" />
+          ) : (
+            <Scale className="text-destructive h-4 w-4" />
+          )
+        }
+        valueClassName={netBalance >= 0 ? 'text-primary' : 'text-destructive'}
       />
     </div>
   );

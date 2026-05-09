@@ -1,7 +1,9 @@
 'use client';
 
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { formatCurrency, getYearlyAmount } from '@/lib/date-utils';
 import type { BudgetSummaryLine, BudgetCategory } from '@/types';
 
@@ -16,6 +18,8 @@ const PERIOD_LABEL: Record<string, string> = {
   biweekly: 'Bi-weekly',
   yearly: 'Yearly',
 };
+
+const UNCATEGORIZED_KEY = '__uncategorized__';
 
 function pct(value: number, total: number): string {
   if (total === 0) return '—';
@@ -75,6 +79,44 @@ function CategorySubtotals({
   );
 }
 
+function CollapseChevron({ collapsed }: { collapsed: boolean }) {
+  return collapsed ? (
+    <ChevronRight className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+  ) : (
+    <ChevronDown className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+  );
+}
+
+/** Inline subtotal cells shown in the header row when a category is collapsed (5 cells). */
+function InlineSubtotals({
+  lines,
+  totalYearlyBudget,
+  totalYearlyNetIncome,
+}: CategorySubtotalsProps) {
+  const scaledTotal = lines.reduce((s, l) => s + l.scaledBudget, 0);
+  const yearlyTotal = lines.reduce(
+    (s, l) => s + getYearlyAmount(l.budgetLine.amount, l.budgetLine.period),
+    0,
+  );
+  return (
+    <>
+      <td className="text-muted-foreground py-1.5 pr-2 text-right text-xs tabular-nums">
+        {formatCurrency(scaledTotal)}
+      </td>
+      <td className="py-1.5 pr-4" />
+      <td className="text-muted-foreground py-1.5 pr-4 text-right text-xs tabular-nums">
+        {formatCurrency(yearlyTotal)}
+      </td>
+      <td className="text-muted-foreground py-1.5 pr-4 text-right text-xs tabular-nums">
+        {pct(yearlyTotal, totalYearlyBudget)}
+      </td>
+      <td className="text-muted-foreground py-1.5 text-right text-xs tabular-nums">
+        {pct(yearlyTotal, totalYearlyNetIncome)}
+      </td>
+    </>
+  );
+}
+
 export function ExpensesTable({
   summaryLines,
   orderedCategories,
@@ -92,10 +134,47 @@ export function ExpensesTable({
   }
   const uncategorizedLines = summaryLines.filter((l) => l.budgetLine.categoryId === null);
 
+  // ---- Collapse state ----
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+
+  const toggleCollapse = (id: string) => {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const allKeys = [
+    ...orderedCategories
+      .filter((cat) => (groupedLines[cat.id] ?? []).length > 0)
+      .map((cat) => cat.id),
+    ...(uncategorizedLines.length > 0 ? [UNCATEGORIZED_KEY] : []),
+  ];
+
+  const collapseAll = () => setCollapsedIds(new Set(allKeys));
+  const expandAll = () => setCollapsedIds(new Set());
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Budget Expenses</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle>Budget Expenses</CardTitle>
+          {allKeys.length > 0 && (
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={collapseAll}>
+                Collapse All
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={expandAll}>
+                Expand All
+              </Button>
+            </div>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         {summaryLines.length === 0 ? (
@@ -131,59 +210,102 @@ export function ExpensesTable({
                 {orderedCategories.map((cat) => {
                   const lines = groupedLines[cat.id] ?? [];
                   if (lines.length === 0) return null;
+                  const collapsed = collapsedIds.has(cat.id);
                   return (
                     <Fragment key={cat.id}>
-                      {/* Category header row */}
-                      <tr className="bg-muted/30">
-                        <td
-                          colSpan={6}
-                          className="border-primary/50 border-l-[3px] px-3 py-1.5 text-sm font-semibold"
-                        >
-                          {cat.name}
+                      {/* Category header row — name cell is always 1 col; remaining 5 cols show
+                          inline subtotals when collapsed or a transparent spacer when expanded */}
+                      <tr
+                        className="bg-muted/30 hover:bg-muted/50 cursor-pointer select-none"
+                        onClick={() => toggleCollapse(cat.id)}
+                        aria-label={collapsed ? 'Expand category' : 'Collapse category'}
+                      >
+                        <td className="border-primary/50 border-l-[3px] px-3 py-1.5 text-sm font-semibold">
+                          <span className="flex items-center gap-1.5">
+                            <CollapseChevron collapsed={collapsed} />
+                            {cat.name}
+                          </span>
                         </td>
+                        {collapsed ? (
+                          <InlineSubtotals
+                            lines={lines}
+                            totalYearlyBudget={totalYearlyBudget}
+                            totalYearlyNetIncome={totalYearlyNetIncome}
+                          />
+                        ) : (
+                          <td colSpan={5} />
+                        )}
                       </tr>
-                      {lines.map((line) => (
-                        <LineRow
-                          key={line.budgetLine.id}
-                          line={line}
+
+                      {/* Individual line rows — hidden when collapsed */}
+                      {!collapsed &&
+                        lines.map((line) => (
+                          <LineRow
+                            key={line.budgetLine.id}
+                            line={line}
+                            totalYearlyBudget={totalYearlyBudget}
+                            totalYearlyNetIncome={totalYearlyNetIncome}
+                          />
+                        ))}
+
+                      {/* Subtotals row — shown only when expanded */}
+                      {!collapsed && (
+                        <CategorySubtotals
+                          lines={lines}
                           totalYearlyBudget={totalYearlyBudget}
                           totalYearlyNetIncome={totalYearlyNetIncome}
                         />
-                      ))}
-                      <CategorySubtotals
-                        lines={lines}
-                        totalYearlyBudget={totalYearlyBudget}
-                        totalYearlyNetIncome={totalYearlyNetIncome}
-                      />
+                      )}
                     </Fragment>
                   );
                 })}
 
-                {uncategorizedLines.length > 0 && (
-                  <>
-                    <tr className="bg-muted/30">
-                      <td
-                        colSpan={6}
-                        className="border-muted-foreground/30 text-muted-foreground border-l-[3px] px-3 py-1.5 text-sm font-semibold"
-                      >
-                        Uncategorized
-                      </td>
-                    </tr>
-                    {uncategorizedLines.map((line) => (
-                      <LineRow
-                        key={line.budgetLine.id}
-                        line={line}
-                        totalYearlyBudget={totalYearlyBudget}
-                        totalYearlyNetIncome={totalYearlyNetIncome}
-                      />
-                    ))}
-                    <CategorySubtotals
-                      lines={uncategorizedLines}
-                      totalYearlyBudget={totalYearlyBudget}
-                      totalYearlyNetIncome={totalYearlyNetIncome}
-                    />
-                  </>
-                )}
+                {/* Uncategorized section */}
+                {uncategorizedLines.length > 0 &&
+                  (() => {
+                    const collapsed = collapsedIds.has(UNCATEGORIZED_KEY);
+                    return (
+                      <Fragment key={UNCATEGORIZED_KEY}>
+                        <tr
+                          className="bg-muted/30 hover:bg-muted/50 cursor-pointer select-none"
+                          onClick={() => toggleCollapse(UNCATEGORIZED_KEY)}
+                          aria-label={collapsed ? 'Expand category' : 'Collapse category'}
+                        >
+                          <td className="border-muted-foreground/30 border-l-[3px] px-3 py-1.5 text-sm font-semibold">
+                            <span className="flex items-center gap-1.5">
+                              <CollapseChevron collapsed={collapsed} />
+                              <span className="text-muted-foreground">Uncategorized</span>
+                            </span>
+                          </td>
+                          {collapsed ? (
+                            <InlineSubtotals
+                              lines={uncategorizedLines}
+                              totalYearlyBudget={totalYearlyBudget}
+                              totalYearlyNetIncome={totalYearlyNetIncome}
+                            />
+                          ) : (
+                            <td colSpan={5} />
+                          )}
+                        </tr>
+                        {!collapsed &&
+                          uncategorizedLines.map((line) => (
+                            <LineRow
+                              key={line.budgetLine.id}
+                              line={line}
+                              totalYearlyBudget={totalYearlyBudget}
+                              totalYearlyNetIncome={totalYearlyNetIncome}
+                            />
+                          ))}
+                        {!collapsed && (
+                          <CategorySubtotals
+                            lines={uncategorizedLines}
+                            totalYearlyBudget={totalYearlyBudget}
+                            totalYearlyNetIncome={totalYearlyNetIncome}
+                          />
+                        )}
+                      </Fragment>
+                    );
+                  })()}
 
                 {/* Grand total */}
                 <tr className="bg-muted/30 border-t-2 font-bold">

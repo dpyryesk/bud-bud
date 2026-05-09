@@ -9,6 +9,10 @@ import { getYearlyAmount } from '@/lib/date-utils';
 import { IncomeSourcesCard } from '@/components/dashboard/income-sources-card';
 import { ExpensesTable } from '@/components/dashboard/expenses-table';
 import { BudgetSummaryCards } from '@/components/budget/budget-summary-cards';
+import {
+  SummaryTransactionsPanel,
+  type SummaryCardType,
+} from '@/components/dashboard/summary-transactions-panel';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import type {
   BudgetSummaryResponse,
@@ -16,14 +20,15 @@ import type {
   BudgetSummaryLine,
   BudgetCategory,
   IncomeSource,
+  TimePeriod,
 } from '@/types';
 
 function DashboardSkeleton() {
   return (
     <div className="space-y-6" aria-busy="true" aria-label="Loading dashboard…">
       {/* Budget cards skeleton */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
+        {[1, 2, 3, 4, 5, 6, 7].map((i) => (
           <Card key={i}>
             <CardContent className="pt-6">
               <div className="bg-muted mb-2 h-4 w-28 animate-pulse rounded" />
@@ -87,6 +92,11 @@ export default function DashboardPage() {
   const [activeBudget, setActiveBudget] = useState<Budget | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  // Panel state for summary card drilldown
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [activeCardType, setActiveCardType] = useState<SummaryCardType | null>(null);
+  const [activePanelPeriod, setActivePanelPeriod] = useState<TimePeriod | null>(null);
 
   // Yearly summary
   const [yearSummaryLines, setYearSummaryLines] = useState<BudgetSummaryLine[]>([]);
@@ -268,6 +278,26 @@ export default function DashboardPage() {
     return () => clearTimeout(id);
   }, [activeBudget, fetchIncomeSources]);
 
+  // ---- Handlers ----
+
+  const handlePeriodCardClick = useCallback(
+    (type: SummaryCardType) => {
+      setActiveCardType(type);
+      setActivePanelPeriod(period);
+      setPanelOpen(true);
+    },
+    [period],
+  );
+
+  const handleYearCardClick = useCallback(
+    (type: SummaryCardType) => {
+      setActiveCardType(type);
+      setActivePanelPeriod(yearPeriod);
+      setPanelOpen(true);
+    },
+    [yearPeriod],
+  );
+
   // ---- Render ----
 
   return (
@@ -311,6 +341,7 @@ export default function DashboardPage() {
               totalUntracked={periodTotalUntracked}
               totalIncome={periodTotalIncome}
               totalDebits={periodTotalDebits}
+              onCardClick={handlePeriodCardClick}
             />
           </div>
 
@@ -326,6 +357,7 @@ export default function DashboardPage() {
               totalUntracked={yearTotalUntracked}
               totalIncome={yearTotalIncome}
               totalDebits={yearTotalDebits}
+              onCardClick={handleYearCardClick}
             />
           </div>
 
@@ -340,6 +372,14 @@ export default function DashboardPage() {
           />
         </>
       )}
+
+      {/* Summary card drilldown panel */}
+      <SummaryTransactionsPanel
+        open={panelOpen}
+        onOpenChange={setPanelOpen}
+        cardType={activeCardType}
+        period={activePanelPeriod}
+      />
     </div>
   );
 }
