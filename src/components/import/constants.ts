@@ -9,6 +9,7 @@ export type CsvMapping = {
   creditColumn: string;
   sourceColumn: string;
   dateFormat: string;
+  skipFirstRow: boolean;
   sourceTagId: string | null;
 };
 

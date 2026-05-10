@@ -40,9 +40,10 @@ export async function POST(request: NextRequest) {
       return (row[columnNumber - 1] || '').trim();
     };
 
+    const csvRows = mapping.skipFirstRow ? parseResult.data.slice(1) : parseResult.data;
     const rows: ParsedTransaction[] = [];
 
-    for (const row of parseResult.data) {
+    for (const row of csvRows) {
       const rawName = getColumnValue(row, mapping.nameColumn);
       const rawDate = getColumnValue(row, mapping.dateColumn);
       const rawDebit = getColumnValue(row, mapping.debitColumn).replace(/[,$]/g, '');

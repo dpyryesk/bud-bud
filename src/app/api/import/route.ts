@@ -41,11 +41,13 @@ export async function POST(request: NextRequest) {
       return (row[columnNumber - 1] || '').trim();
     };
 
+    const csvRows = mapping.skipFirstRow ? parseResult.data.slice(1) : parseResult.data;
+
     let imported = 0;
     let duplicates = 0;
     let errors = 0;
 
-    for (const row of parseResult.data) {
+    for (const row of csvRows) {
       try {
         const rawName = getColumnValue(row, mapping.nameColumn);
         const rawDate = getColumnValue(row, mapping.dateColumn);
@@ -137,7 +139,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      total: parseResult.data.length,
+      total: csvRows.length,
       imported,
       duplicates,
       errors,

@@ -62,6 +62,7 @@ export default function ImportPage() {
   const [sourceColumn, setSourceColumn] = useState<string | null>('');
   const [dateFormat, setDateFormat] = useState('YYYY-MM-DD');
   const [sourceTagId, setSourceTagId] = useState<string | null>('');
+  const [skipFirstRow, setSkipFirstRow] = useState(false);
 
   // Preview
   const [preview, setPreview] = useState<ImportPreview | null>(null);
@@ -107,6 +108,7 @@ export default function ImportPage() {
     setCreditColumn(m.creditColumn);
     setSourceColumn(m.sourceColumn || '');
     setDateFormat(m.dateFormat || 'YYYY-MM-DD');
+    setSkipFirstRow(Boolean(m.skipFirstRow));
     setSourceTagId(m.sourceTagId || '');
   }, []);
 
@@ -118,6 +120,7 @@ export default function ImportPage() {
     setCreditColumn('');
     setSourceColumn('');
     setDateFormat('YYYY-MM-DD');
+    setSkipFirstRow(false);
     setSourceTagId('');
   }, []);
 
@@ -170,6 +173,7 @@ export default function ImportPage() {
         creditColumn,
         sourceColumn: sourceColumn || '',
         dateFormat,
+        skipFirstRow,
         sourceTagId: sourceTagId || null,
       }),
     });
@@ -198,6 +202,7 @@ export default function ImportPage() {
       sourceColumn: sourceColumn && sourceColumn !== 'none' ? sourceColumn : '',
       dateFormat,
       sourceTagId: sourceTagId && sourceTagId !== 'none' ? sourceTagId : null,
+      skipFirstRow,
     };
   };
 
@@ -272,6 +277,7 @@ export default function ImportPage() {
     setPreview(null);
     setResult(null);
     setSelectedMappingId('');
+    setSkipFirstRow(false);
     setStep('upload');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -459,9 +465,20 @@ export default function ImportPage() {
                       </thead>
                       <tbody>
                         {csvRawPreview.map((row, i) => (
-                          <tr key={i} className="border-t">
+                          <tr
+                            key={i}
+                            className={`border-t ${skipFirstRow && i === 0 ? 'opacity-40' : ''}`}
+                          >
                             {csvHeaders.map((column, j) => (
-                              <td key={j} className="max-w-48 truncate px-3 py-1.5">
+                              <td
+                                key={j}
+                                className={`max-w-48 truncate px-3 py-1.5 ${skipFirstRow && i === 0 ? 'italic' : ''}`}
+                              >
+                                {skipFirstRow && i === 0 && j === 0 ? (
+                                  <span className="text-muted-foreground mr-1 font-medium not-italic">
+                                    [header]
+                                  </span>
+                                ) : null}
                                 {row[Number(column) - 1] || ''}
                               </td>
                             ))}
@@ -614,6 +631,21 @@ export default function ImportPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="col-span-2">
+                  <label className="flex cursor-pointer items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-gray-300 accent-current"
+                      checked={skipFirstRow}
+                      onChange={(e) => setSkipFirstRow(e.target.checked)}
+                    />
+                    <span className="text-sm font-medium">Skip first row (it is a header)</span>
+                  </label>
+                  <p className="text-muted-foreground mt-1 ml-6 text-xs">
+                    Check this if the first row contains column labels rather than transaction data.
+                  </p>
                 </div>
               </div>
 

@@ -103,17 +103,18 @@ model BudgetLineTag {
 }
 
 model CsvMapping {
-  id           String   @id @default(cuid())
-  name         String   @unique
-  dateColumn   String
-  nameColumn   String
-  debitColumn  String
-  creditColumn String
-  sourceColumn String   @default("")
-  dateFormat   String   @default("YYYY-MM-DD")
-  sourceTagId  String?
-  sourceTag    Tag?     @relation(fields: [sourceTagId], references: [id])
-  createdAt    DateTime @default(now())
+  id             String   @id @default(cuid())
+  name           String   @unique
+  dateColumn     String
+  nameColumn     String
+  debitColumn    String
+  creditColumn   String
+  sourceColumn   String   @default("")
+  dateFormat     String   @default("YYYY-MM-DD")
+  skipFirstRow   Boolean  @default(false)
+  sourceTagId    String?
+  sourceTag      Tag?     @relation(fields: [sourceTagId], references: [id])
+  createdAt      DateTime @default(now())
 }
 
 model AutoTagRule {

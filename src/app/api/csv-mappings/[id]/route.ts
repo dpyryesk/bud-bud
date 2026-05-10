@@ -15,6 +15,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     creditColumn,
     sourceColumn,
     dateFormat,
+    skipFirstRow,
     sourceTagId,
   } = body;
 
@@ -36,6 +37,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         creditColumn,
         sourceColumn: sourceColumn && sourceColumn !== 'none' ? sourceColumn : '',
         dateFormat: dateFormat || 'YYYY-MM-DD',
+        skipFirstRow: Boolean(skipFirstRow),
         sourceTagId: sourceTagId && sourceTagId !== 'none' ? sourceTagId : null,
       },
     });

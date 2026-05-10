@@ -17,6 +17,6 @@
 [x] Add advanced filtering to the transactions view
 [x] Handle bi-weekly periods (there can be two or three per month)
 [x] Update README with screenshots and instructions
-[ ] Skip CSV header option
+[x] Skip CSV header option
 [ ] Simplify REGEX rules to use wildcards
 [ ] Add a changelog
