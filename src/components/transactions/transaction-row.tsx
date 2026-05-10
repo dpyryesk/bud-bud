@@ -2,14 +2,13 @@
 
 import { useState, useRef } from 'react';
 import { Wand2 } from 'lucide-react';
-import { format } from 'date-fns';
 import { buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { TagBadge } from '@/components/tags/tag-badge';
 import { TagSelectorDropdown } from '@/components/tags/tag-selector-dropdown';
-import { formatCurrency } from '@/lib/date-utils';
+import { formatCurrency, formatIsoDateForDisplay } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
 import type { TransactionWithTags } from '@/types';
 import type { TagOptionWithLevel } from './constants';
@@ -65,7 +64,7 @@ export function TransactionRow({
     <TableRow>
       {/* Date */}
       <TableCell className="text-xs tabular-nums">
-        {format(new Date(transaction.date), 'MMM d, yyyy')}
+        {formatIsoDateForDisplay(transaction.date, 'MMM d, yyyy')}
       </TableCell>
 
       {/* Name + source */}

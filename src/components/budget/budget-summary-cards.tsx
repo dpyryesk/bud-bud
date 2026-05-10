@@ -85,13 +85,6 @@ export function BudgetSummaryCards({
         icon={<DollarSign className="h-4 w-4" />}
       />
       <SummaryCard
-        title="Total Spending"
-        value={formatCurrency(totalDebits)}
-        subtitle="Sum of all debits"
-        icon={<CreditCard className="h-4 w-4" />}
-        onClick={onCardClick ? () => onCardClick('total-spending') : undefined}
-      />
-      <SummaryCard
         title="Tracked Spending"
         value={formatCurrency(totalActual)}
         subtitle="Across budget lines"
@@ -125,6 +118,13 @@ export function BudgetSummaryCards({
         icon={<ArrowDownCircle className="text-primary h-4 w-4" />}
         valueClassName="text-primary"
         onClick={onCardClick ? () => onCardClick('total-income') : undefined}
+      />
+      <SummaryCard
+        title="Total Spending"
+        value={formatCurrency(totalDebits)}
+        subtitle="Sum of all debits"
+        icon={<CreditCard className="h-4 w-4" />}
+        onClick={onCardClick ? () => onCardClick('total-spending') : undefined}
       />
       <SummaryCard
         title="Net Balance"

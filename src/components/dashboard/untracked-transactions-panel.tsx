@@ -11,7 +11,7 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet';
 import { TagBadge } from '@/components/tags/tag-badge';
-import { formatCurrency } from '@/lib/date-utils';
+import { formatCurrency, formatIsoDateForDisplay } from '@/lib/date-utils';
 import type { TransactionWithTags, TimePeriod } from '@/types';
 
 interface UntrackedTransactionsPanelProps {
@@ -46,8 +46,10 @@ export function UntrackedTransactionsPanel({
       setTotal(0);
       try {
         const params = new URLSearchParams({
-          start: period.start.toISOString(),
-          end: period.end.toISOString(),
+          // Use date-only strings so the server receives UTC midnight boundaries,
+          // matching how transaction dates are stored (UTC midnight).
+          start: format(period.start, 'yyyy-MM-dd'),
+          end: format(period.end, 'yyyy-MM-dd'),
           tagIds: tagIds.join(','),
           limit: '200',
         });
@@ -117,7 +119,7 @@ export function UntrackedTransactionsPanel({
               {transactions.map((tx) => (
                 <li key={tx.id} className="flex items-start gap-3 px-4 py-3 text-sm">
                   <span className="text-muted-foreground w-20 shrink-0 tabular-nums">
-                    {format(new Date(tx.date), 'MMM d')}
+                    {formatIsoDateForDisplay(tx.date, 'MMM d')}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate leading-tight font-medium">{tx.name}</p>

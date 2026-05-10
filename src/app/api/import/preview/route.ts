@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashTransaction } from '@/lib/hash';
 import { normalizeTransactionName } from '@/lib/normalize';
+import { parseDateInputAsUtc } from '@/lib/date-utils';
 import Papa from 'papaparse';
 import { parse as parseDate } from 'date-fns';
 import type { ParsedTransaction } from '@/types';
@@ -75,9 +76,16 @@ export async function POST(request: NextRequest) {
             .replace('YYYY', 'yyyy')
             .replace('DD', 'dd')
             .replace('MM', 'MM');
-          date = parseDate(rawDate, fnsFormat, new Date());
+          const localDate = parseDate(rawDate, fnsFormat, new Date());
+          // Normalize to UTC midnight using local calendar components
+          date = new Date(
+            Date.UTC(localDate.getFullYear(), localDate.getMonth(), localDate.getDate()),
+          );
         } else {
-          date = new Date(rawDate);
+          // YYYY-MM-DD strings are already UTC midnight per ECMAScript spec, but
+          // parseDateInputAsUtc uses the component approach so behaviour is explicit
+          // and immune to any future runtime changes.
+          date = parseDateInputAsUtc(rawDate);
         }
 
         if (isNaN(date.getTime())) {

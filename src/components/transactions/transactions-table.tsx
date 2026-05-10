@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { format } from 'date-fns';
 import { useTimePeriod } from '@/hooks/use-time-period';
 import { Button } from '@/components/ui/button';
 import {
@@ -149,8 +150,10 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        start: period.start.toISOString(),
-        end: period.end.toISOString(),
+        // Use date-only strings so the server always receives UTC midnight boundaries,
+        // matching how transaction dates are stored (UTC midnight).
+        start: format(period.start, 'yyyy-MM-dd'),
+        end: format(period.end, 'yyyy-MM-dd'),
         page: effectivePage.toString(),
         limit: '50',
       });
@@ -264,8 +267,8 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
   const handleAutoTag = async () => {
     try {
       const params = new URLSearchParams({
-        start: period.start.toISOString(),
-        end: period.end.toISOString(),
+        start: format(period.start, 'yyyy-MM-dd'),
+        end: format(period.end, 'yyyy-MM-dd'),
       });
       const res = await fetch(`/api/auto-tag?${params}`, { method: 'POST' });
       if (res.ok) {

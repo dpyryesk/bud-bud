@@ -11,7 +11,7 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet';
 import { TagBadge } from '@/components/tags/tag-badge';
-import { formatCurrency } from '@/lib/date-utils';
+import { formatCurrency, formatIsoDateForDisplay } from '@/lib/date-utils';
 import type { TransactionWithTags, TimePeriod } from '@/types';
 
 export type SummaryCardType =
@@ -154,7 +154,7 @@ export function SummaryTransactionsPanel({
                 <li key={tx.id} className="flex items-start gap-3 px-4 py-3 text-sm">
                   {/* Date */}
                   <span className="text-muted-foreground w-20 shrink-0 tabular-nums">
-                    {dateFnsFormat(new Date(tx.date), 'MMM d')}
+                    {formatIsoDateForDisplay(tx.date, 'MMM d')}
                   </span>
 
                   {/* Name + tags */}

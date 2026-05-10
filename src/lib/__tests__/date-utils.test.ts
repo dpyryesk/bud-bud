@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { parse as parseDateFns } from 'date-fns';
 import {
   getPresetPeriods,
   getDefaultPeriod,
@@ -648,5 +649,67 @@ describe('isThirdPaycheckMonth', () => {
     // Both should have 2 third-paycheck months, but likely different ones
     expect(months1).toHaveLength(2);
     expect(months2).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CSV date parsing strategies (mirrors import/route.ts logic)
+// ---------------------------------------------------------------------------
+// The import routes use two strategies to convert CSV date strings to UTC
+// midnight Date objects:
+//
+//  (A) YYYY-MM-DD strings  → parseDateInputAsUtc(rawDate)
+//  (B) Other formats       → date-fns parse() to get local components,
+//                            then Date.UTC(year, month, day)
+//
+// Both must produce the same UTC midnight for the same calendar day,
+// regardless of the server timezone.
+// ---------------------------------------------------------------------------
+describe('CSV date parsing strategies', () => {
+  it('(A) parseDateInputAsUtc yields UTC midnight for a YYYY-MM-DD string', () => {
+    const d = parseDateInputAsUtc('2026-01-15');
+    expect(d.toISOString()).toBe('2026-01-15T00:00:00.000Z');
+  });
+
+  it('(B) date-fns parse + Date.UTC yields UTC midnight for a d/M/yyyy string', () => {
+    // Simulates what the import route does for non-YYYY-MM-DD formats.
+    // date-fns parse() returns a local-midnight Date (calendar day is correct),
+    // then we extract calendar components and build UTC midnight.
+    const rawDate = '15/01/2026';
+    const fnsFormat = 'dd/MM/yyyy';
+    const localDate = parseDateFns(rawDate, fnsFormat, new Date());
+    const d = new Date(
+      Date.UTC(localDate.getFullYear(), localDate.getMonth(), localDate.getDate()),
+    );
+    expect(d.toISOString()).toBe('2026-01-15T00:00:00.000Z');
+  });
+
+  it('(A) and (B) produce identical timestamps for the same calendar day', () => {
+    // Strategy A
+    const a = parseDateInputAsUtc('2026-03-31');
+
+    // Strategy B (with MM/DD/YYYY format common in US bank CSVs)
+    const localDate = parseDateFns('03/31/2026', 'MM/dd/yyyy', new Date());
+    const b = new Date(
+      Date.UTC(localDate.getFullYear(), localDate.getMonth(), localDate.getDate()),
+    );
+
+    expect(a.getTime()).toBe(b.getTime());
+  });
+
+  it('parseDateInputAsUtc result is identical to native new Date() for YYYY-MM-DD', () => {
+    // ECMAScript specifies that date-only ISO strings are parsed as UTC midnight.
+    // parseDateInputAsUtc must match that canonical behaviour.
+    const native = new Date('2026-06-01');
+    const custom = parseDateInputAsUtc('2026-06-01');
+    expect(custom.toISOString()).toBe(native.toISOString());
+  });
+
+  it('(A) formatIsoDateForDisplay round-trips the calendar day stored by parseDateInputAsUtc', () => {
+    // The UTC-midnight date stored by parseDateInputAsUtc must display as the
+    // original calendar day — verified via formatIsoDateForDisplay.
+    const stored = parseDateInputAsUtc('2026-12-25');
+    const displayed = formatIsoDateForDisplay(stored.toISOString(), 'yyyy-MM-dd');
+    expect(displayed).toBe('2026-12-25');
   });
 });
