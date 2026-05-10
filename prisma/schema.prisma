@@ -16,6 +16,7 @@ model Transaction {
   credit         Float            @default(0)
   source         String           @default("")
   notes          String           @default("")
+  archived       Boolean          @default(false)
   csvHash        String           @unique
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
@@ -23,6 +24,7 @@ model Transaction {
 
   @@index([normalizedName])
   @@index([date])
+  @@index([archived])
 }
 
 model Tag {

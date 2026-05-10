@@ -13,6 +13,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import {
   Select,
   SelectContent,
@@ -277,56 +278,76 @@ export function AutoTagRuleSheet({
             ) : !preview ? (
               <p className="text-muted-foreground text-xs">No preview available.</p>
             ) : (
-              <div className="space-y-3">
-                <div>
-                  <p className="mb-1 text-xs font-medium">
-                    {preview.taggedTotal > preview.tagged.length
-                      ? `Tagged (showing ${preview.tagged.length} of ${preview.taggedTotal})`
-                      : `Tagged (${preview.taggedTotal})`}
-                  </p>
-                  <div className="max-h-32 space-y-1 overflow-y-auto">
-                    {preview.taggedTotal === 0 ? (
-                      <p className="text-muted-foreground text-xs">No tagged matches</p>
-                    ) : (
-                      preview.tagged.map((tx) => (
-                        <div key={tx.id} className="rounded border p-1.5">
-                          <p className="truncate text-xs font-medium">{tx.name}</p>
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {tx.tags
-                              .filter((t) => !t.isSource)
-                              .map((t) => (
-                                <TagBadge
-                                  key={t.id}
-                                  name={t.name}
-                                  color={t.color}
-                                  className="text-[10px]"
-                                />
-                              ))}
+              <TooltipProvider>
+                <div className="space-y-3">
+                  <div>
+                    <p className="mb-1 text-xs font-medium">
+                      {preview.taggedTotal > preview.tagged.length
+                        ? `Tagged (showing ${preview.tagged.length} of ${preview.taggedTotal})`
+                        : `Tagged (${preview.taggedTotal})`}
+                    </p>
+                    <div className="max-h-32 space-y-1 overflow-y-auto">
+                      {preview.taggedTotal === 0 ? (
+                        <p className="text-muted-foreground text-xs">No tagged matches</p>
+                      ) : (
+                        preview.tagged.map((tx) => (
+                          <div key={tx.id} className="rounded border p-1.5">
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={<p className="truncate text-xs font-medium" />}
+                              >
+                                {tx.name}
+                              </TooltipTrigger>
+                              <TooltipContent side="bottom" align="start">
+                                {tx.name}
+                              </TooltipContent>
+                            </Tooltip>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {tx.tags
+                                .filter((t) => !t.isSource)
+                                .map((t) => (
+                                  <TagBadge
+                                    key={t.id}
+                                    name={t.name}
+                                    color={t.color}
+                                    className="text-[10px]"
+                                  />
+                                ))}
+                            </div>
                           </div>
-                        </div>
-                      ))
-                    )}
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs font-medium">
+                      {preview.untaggedTotal > preview.untagged.length
+                        ? `Untagged (showing ${preview.untagged.length} of ${preview.untaggedTotal})`
+                        : `Untagged (${preview.untaggedTotal})`}
+                    </p>
+                    <div className="max-h-32 space-y-1 overflow-y-auto">
+                      {preview.untaggedTotal === 0 ? (
+                        <p className="text-muted-foreground text-xs">No untagged matches</p>
+                      ) : (
+                        preview.untagged.map((tx) => (
+                          <div key={tx.id} className="rounded border p-1.5">
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={<p className="truncate text-xs font-medium" />}
+                              >
+                                {tx.name}
+                              </TooltipTrigger>
+                              <TooltipContent side="bottom" align="start">
+                                {tx.name}
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <p className="mb-1 text-xs font-medium">
-                    {preview.untaggedTotal > preview.untagged.length
-                      ? `Untagged (showing ${preview.untagged.length} of ${preview.untaggedTotal})`
-                      : `Untagged (${preview.untaggedTotal})`}
-                  </p>
-                  <div className="max-h-32 space-y-1 overflow-y-auto">
-                    {preview.untaggedTotal === 0 ? (
-                      <p className="text-muted-foreground text-xs">No untagged matches</p>
-                    ) : (
-                      preview.untagged.map((tx) => (
-                        <div key={tx.id} className="rounded border p-1.5">
-                          <p className="truncate text-xs font-medium">{tx.name}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
+              </TooltipProvider>
             )}
           </div>
         </div>

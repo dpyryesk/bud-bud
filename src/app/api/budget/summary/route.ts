@@ -11,7 +11,7 @@ import { collectDescendantTagIds } from '@/lib/tag-tree';
 /**
  * Return the latest budget whose startDate <= date.
  * Falls back to the earliest budget if none qualifies (date is before all budgets).
- * Assumes budgets is sorted by startDate asc.
+ * Assumes budgets are sorted by startDate asc.
  */
 function findApplicableBudget(budgets: Budget[], date: Date): Budget {
   let applicable: Budget | null = null;
@@ -147,13 +147,14 @@ export async function GET(request: NextRequest) {
   const effectiveStart =
     rolloverHistoryStart < viewPeriod.start ? rolloverHistoryStart : viewPeriod.start;
 
-  // Load ALL transactions we'll ever need in one query
+  // Load ALL transactions we'll ever need in one query (exclude archived)
   const allTransactions = await prisma.transaction.findMany({
     where: {
       date: {
         gte: effectiveStart,
         lte: viewPeriod.end,
       },
+      archived: false,
     },
     include: {
       tags: {

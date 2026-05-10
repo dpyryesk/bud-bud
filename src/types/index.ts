@@ -30,6 +30,7 @@ export type TransactionWithTags = {
   credit: number;
   source: string;
   notes: string;
+  archived: boolean;
   tags: { id: string; name: string; color: string; isSource: boolean }[];
 };
 

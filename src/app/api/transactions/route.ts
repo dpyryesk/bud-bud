@@ -28,6 +28,7 @@ function formatTransaction(t: RawTransaction) {
     credit: t.credit,
     source: t.source,
     notes: t.notes,
+    archived: t.archived,
     tags: t.tags.map((tt) => tt.tag),
   };
 }
@@ -49,6 +50,9 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get('search')?.trim() ?? '';
   const minAmountVal = parseFloat(searchParams.get('minAmount') ?? '');
   const maxAmountVal = parseFloat(searchParams.get('maxAmount') ?? '');
+  // archived=true → show only archived; default → show only non-archived
+  const archivedParam = searchParams.get('archived');
+  const archivedFilter = archivedParam === 'true' ? true : false;
 
   if (!Number.isInteger(rawPage) || !Number.isInteger(rawLimit)) {
     return NextResponse.json({ error: 'page and limit must be integers' }, { status: 400 });
@@ -57,7 +61,7 @@ export async function GET(request: NextRequest) {
   const page = Math.max(1, rawPage);
   const limit = nolimit ? Number.MAX_SAFE_INTEGER : Math.min(200, Math.max(1, rawLimit));
 
-  const where: Record<string, unknown> = {};
+  const where: Record<string, unknown> = { archived: archivedFilter };
 
   if (start && end) {
     where.date = {

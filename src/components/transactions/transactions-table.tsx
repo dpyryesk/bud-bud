@@ -264,6 +264,17 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
     setTransactions((prev) => prev.map((tx) => (tx.id === transactionId ? { ...tx, notes } : tx)));
   }, []);
 
+  const handleArchive = useCallback(async (transactionId: string) => {
+    const res = await fetch(`/api/transactions/${transactionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived: true }),
+    });
+    if (!res.ok) return;
+    setTransactions((prev) => prev.filter((tx) => tx.id !== transactionId));
+    setTotal((prev) => Math.max(0, prev - 1));
+  }, []);
+
   const handleAutoTag = async () => {
     try {
       const params = new URLSearchParams({
@@ -359,18 +370,19 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
               <TableHead className="w-26.25 text-right">Credit</TableHead>
               <TableHead>Tags</TableHead>
               <TableHead className="w-14 text-center">Notes</TableHead>
+              <TableHead className="w-14 text-center">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
+                <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </TableCell>
               </TableRow>
             ) : transactions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
+                <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">
                   {emptyMessage}
                 </TableCell>
               </TableRow>
@@ -383,6 +395,7 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
                   onSetTags={handleSetTags}
                   onUpdateNotes={handleUpdateNotes}
                   onRuleCreated={handleRuleCreated}
+                  onArchive={handleArchive}
                 />
               ))
             )}

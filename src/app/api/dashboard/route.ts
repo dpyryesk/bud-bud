@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
       gte: new Date(start),
       lte: new Date(end),
     },
+    archived: false,
   };
 
   const transactions = await prisma.transaction.findMany({

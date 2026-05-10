@@ -24,10 +24,11 @@ export async function runAutoTag(start?: Date, end?: Date): Promise<AutoTagResul
     dateFilter.date = { gte: start, lte: end };
   }
 
-  // Fetch all transactions that currently have no non-source tags
+  // Fetch all non-archived transactions that currently have no non-source tags
   const untaggedTransactions = await prisma.transaction.findMany({
     where: {
       ...dateFilter,
+      archived: false,
       tags: {
         none: {
           tag: { isSource: false },

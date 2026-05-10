@@ -88,11 +88,12 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Load all debit transactions in the period with their tags
+  // Load all debit transactions in the period with their tags (exclude archived)
   const transactions = await prisma.transaction.findMany({
     where: {
       date: { gte: periodStart, lte: periodEnd },
       debit: { gt: 0 },
+      archived: false,
     },
     include: {
       tags: {
