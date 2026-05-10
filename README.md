@@ -6,12 +6,13 @@ once for reuse.
 
 ## Features
 
-- Dashboard with income summary, spending charts, expenses table, and untracked-category breakdown
+- Dashboard with budget summary cards, expected income, and budget expenses allocation table
 - Multiple time-scoped budgets — create a new budget version whenever your plan changes
 - Budget lines with planned amounts per period, grouped into drag-and-drop categories
 - Income sources with net and gross amounts across monthly, bi-weekly, and yearly periods
-- Untracked categories — name and group tagged spending that falls outside budget lines
+- Untracked categories — name and group tagged spending that falls outside budget lines (on the Budget page)
 - Transaction management with manual tag assignment and advanced filtering
+- Transaction archiving — hide transactions from reports and budget calculations without deleting them
 - Tag management (create, edit, color-code, and organize tags hierarchically)
 - CSV import with preview and column mapping (saved per source for reuse)
 - Auto-tagging rules to speed up transaction categorization
@@ -19,31 +20,24 @@ once for reuse.
 
 ## Getting Started
 
-### 1) Install dependencies
+Clone the repository and run:
 
 ```bash
-pnpm install
+pnpm bootstrap
 ```
 
-### 2) Configure environment
-
-Copy `.env.example` to `.env` and set the database URL.
-
-### 3) Run database setup
-
-```bash
-pnpm prisma migrate dev
-```
-
-### 4) Start the development server
-
-```bash
-pnpm dev
-```
+That is the only command needed. It automatically installs dependencies, copies `.env.example`
+to `.env` if the file does not exist, applies database migrations, builds the production bundle,
+and starts the server.
 
 Open [http://localhost:3000](http://localhost:3000).
 
+> **For active development** use `pnpm dev` instead. Run `pnpm db:migrate` and
+> `pnpm db:generate` once first to set up the database, then use `pnpm dev` for hot-reloading.
+
 ## How to Use the App
+
+See [Getting Started](GETTING_STARTED.md) for a detailed walk through of the application setup and usage.
 
 ### 1) Create tags
 
@@ -112,6 +106,8 @@ Tip: Use a small sample CSV first to verify mapping behavior before importing a 
 3. Open a transaction and assign one or more tags.
 4. Save changes.
 5. (Optional) Create auto-tag rules for repeated merchant patterns.
+6. (Optional) Archive transactions you want to exclude from reports (e.g. income deposits already tracked via Income
+   Sources). Archived transactions are accessible at any time via **Archived** in the sidebar.
 
 Tip: After tagging, revisit **Budget** and **Dashboard** to confirm spending is landing in the expected categories.
 
@@ -119,19 +115,19 @@ Tip: After tagging, revisit **Budget** and **Dashboard** to confirm spending is 
 
 The **Dashboard** shows a snapshot of the selected time period:
 
-- **Income sources card** — total net income scaled to the period, with a per-source breakdown.
-- **Spending charts** — visual breakdown of actual vs. budgeted spending by tag.
-- **Expenses table** — line-by-line comparison of budgeted vs. actual amounts.
-- **Untracked categories** — spending that has a tag but no matching budget line. Group these into named dashboard
-  categories (e.g. `Irregular`, `One-off`) so they don't clutter the main view. Transactions inside an untracked
-  category can be reviewed in a slide-out panel.
+- **Budget summary cards** — clickable cards for both the selected period and the full year (total budget, total
+  spent, remaining, untracked, income, and total debits). Click any card to drill into the individual transactions
+  behind the number.
+- **Expected Income** — yearly net income and a per-source breakdown.
+- **Budget Expenses** — yearly budget-allocation table showing each line's planned amount, period, yearly total,
+  and its percentage of total budget and net income.
 
 ### 6) Set up untracked categories (optional)
 
-1. On the **Dashboard**, scroll to the **Untracked** section.
+1. Open **Budget** in the sidebar and scroll to the **Untracked Spending** section.
 2. Click **Add Category** and give it a name.
 3. Assign tags whose spending you want grouped under that category.
-4. The dashboard will show the total for that group and let you drill into individual transactions.
+4. The budget page shows the period total for that group and lets you drill into individual transactions.
 
 Tip: Use untracked categories for irregular or one-off expenses that you don't want to plan a formal budget line for.
 
@@ -143,5 +139,6 @@ Tip: Use untracked categories for irregular or one-off expenses that you don't w
 4. Add budget lines (optionally grouped into categories).
 5. Import CSV transactions.
 6. Tag uncategorized transactions (use auto-tag rules for recurring merchants).
-7. Review the **Dashboard** — check the income summary, spending charts, and untracked categories.
+7. Review the **Dashboard** — check budget summary cards, expected income, and budget expenses. Review and group
+   untracked spending on the **Budget** page.
 8. Adjust budget lines over time; create a new budget version when your plan changes significantly.

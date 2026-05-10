@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "setup": "pnpm install && node -e \"const fs=require('fs');if(!fs.existsSync('.env'))fs.copyFileSync('.env.example','.env');\" && prisma migrate deploy && prisma generate",
+    "bootstrap": "pnpm run setup && pnpm run build && pnpm run start",
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
