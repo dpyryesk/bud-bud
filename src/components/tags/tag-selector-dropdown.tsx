@@ -17,8 +17,23 @@ export type TagSelectorOption = {
   level: number;
 };
 
-type BaseProps = {
+/**
+ * A named group of tags rendered with a section-header divider in the dropdown.
+ */
+export type TagSection = {
+  label: string;
   tags: TagSelectorOption[];
+};
+
+type BaseProps = {
+  /** Flat list of tags (used when no sections grouping is needed). */
+  tags?: TagSelectorOption[];
+  /**
+   * Optional grouped sections. When provided the dropdown renders a
+   * non-selectable section-header label before each group's tags.
+   * Takes precedence over `tags` if both are given.
+   */
+  sections?: TagSection[];
   placeholder?: string;
   align?: 'start' | 'center' | 'end';
 };
@@ -58,9 +73,14 @@ export type TagSelectorDropdownProps = SingleProps | MultiProps;
  * Shared tag-selector dropdown used across transactions, budget, and auto-tag
  * rules. Renders a 400 × 600 px popover with a search bar and a scrollable,
  * hierarchically-indented tag list.
+ *
+ * Supports optional `sections` prop for grouping tags under labelled headers.
  */
 export function TagSelectorDropdown(props: TagSelectorDropdownProps) {
-  const { tags, placeholder = 'Select a tag…', align = 'start' } = props;
+  const { sections, placeholder = 'Select a tag…', align = 'start' } = props;
+  // Fall back to props.tags when no sections are given
+  const flatTags = props.tags ?? [];
+
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -68,8 +88,6 @@ export function TagSelectorDropdown(props: TagSelectorDropdownProps) {
     setOpen(newOpen);
     if (!newOpen) setSearch('');
   };
-
-  const filteredTags = tags.filter((t) => t.name.toLowerCase().includes(search.toLowerCase()));
 
   const handleSelect = (tagId: string) => {
     if (props.mode === 'single') {
@@ -85,10 +103,16 @@ export function TagSelectorDropdown(props: TagSelectorDropdownProps) {
     return props.value.includes(tagId);
   };
 
+  // All tags across all sections (or flat list), used for trigger display
+  const allTags: TagSelectorOption[] = sections ? sections.flatMap((s) => s.tags) : flatTags;
+
+  const matchesSearch = (tag: TagSelectorOption) =>
+    tag.name.toLowerCase().includes(search.toLowerCase());
+
   /* ---- Trigger ---- */
   const renderTrigger = () => {
     if (props.mode === 'single') {
-      const selectedTag = tags.find((t) => t.id === props.value);
+      const selectedTag = allTags.find((t) => t.id === props.value);
       return (
         <PopoverTrigger
           className={cn(
@@ -126,7 +150,7 @@ export function TagSelectorDropdown(props: TagSelectorDropdownProps) {
 
     /* Default multi trigger (select-style showing selection count) */
     const count = value.length;
-    const firstTag = count > 0 ? tags.find((t) => t.id === value[0]) : null;
+    const firstTag = count > 0 ? allTags.find((t) => t.id === value[0]) : null;
     return (
       <PopoverTrigger
         className={cn(
@@ -152,6 +176,84 @@ export function TagSelectorDropdown(props: TagSelectorDropdownProps) {
     );
   };
 
+  /* ---- Tag item button ---- */
+  const renderTagButton = (tag: TagSelectorOption) => {
+    const selected = isSelected(tag.id);
+    return (
+      <button
+        key={tag.id}
+        type="button"
+        className={cn(
+          'hover:bg-muted flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors',
+          selected && 'bg-muted',
+        )}
+        onClick={() => handleSelect(tag.id)}
+      >
+        <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: tag.color }} />
+        <span className="flex-1 truncate" style={{ paddingLeft: `${tag.level * 14}px` }}>
+          {tag.name}
+        </span>
+        {selected && <Check className="ml-auto h-4 w-4 shrink-0 opacity-70" />}
+      </button>
+    );
+  };
+
+  /* ---- Tag list body ---- */
+  const renderTagList = () => {
+    if (sections) {
+      // Sections mode — render groups with section-header labels
+      const hasAnyMatch = sections.some((s) => s.tags.some(matchesSearch));
+
+      if (allTags.length === 0) {
+        return (
+          <p className="text-muted-foreground p-2 text-center text-sm">
+            No tags available. Create some in Tags.
+          </p>
+        );
+      }
+      if (!hasAnyMatch) {
+        return (
+          <p className="text-muted-foreground p-2 text-center text-sm">
+            No tags match your search.
+          </p>
+        );
+      }
+
+      const visibleSections = sections
+        .map((section) => ({ ...section, filtered: section.tags.filter(matchesSearch) }))
+        .filter((section) => section.filtered.length > 0);
+
+      return visibleSections.map((section, visibleIndex) => (
+        <div key={section.label}>
+          {/* Section divider (skip top border on first visible section) */}
+          {visibleIndex > 0 && <div className="my-1 border-t" />}
+          <p className="text-muted-foreground px-2 py-1 text-xs font-medium tracking-wide uppercase">
+            {section.label}
+          </p>
+          {section.filtered.map(renderTagButton)}
+        </div>
+      ));
+    }
+
+    // Flat mode (legacy / no sections)
+    const filteredTags = flatTags.filter(matchesSearch);
+
+    if (flatTags.length === 0) {
+      return (
+        <p className="text-muted-foreground p-2 text-center text-sm">
+          No tags available. Create some in Tags.
+        </p>
+      );
+    }
+    if (filteredTags.length === 0) {
+      return (
+        <p className="text-muted-foreground p-2 text-center text-sm">No tags match your search.</p>
+      );
+    }
+
+    return filteredTags.map(renderTagButton);
+  };
+
   /* ---- Render ---- */
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
@@ -172,44 +274,7 @@ export function TagSelectorDropdown(props: TagSelectorDropdownProps) {
           </div>
 
           {/* Tag list */}
-          <div className="flex-1 overflow-y-auto p-1">
-            {tags.length === 0 ? (
-              <p className="text-muted-foreground p-2 text-center text-sm">
-                No tags available. Create some in Tags.
-              </p>
-            ) : filteredTags.length === 0 ? (
-              <p className="text-muted-foreground p-2 text-center text-sm">
-                No tags match your search.
-              </p>
-            ) : (
-              filteredTags.map((tag) => {
-                const selected = isSelected(tag.id);
-                return (
-                  <button
-                    key={tag.id}
-                    type="button"
-                    className={cn(
-                      'hover:bg-muted flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors',
-                      selected && 'bg-muted',
-                    )}
-                    onClick={() => handleSelect(tag.id)}
-                  >
-                    <span
-                      className="h-3 w-3 shrink-0 rounded-full"
-                      style={{ backgroundColor: tag.color }}
-                    />
-                    <span
-                      className="flex-1 truncate"
-                      style={{ paddingLeft: `${tag.level * 14}px` }}
-                    >
-                      {tag.name}
-                    </span>
-                    {selected && <Check className="ml-auto h-4 w-4 shrink-0 opacity-70" />}
-                  </button>
-                );
-              })
-            )}
-          </div>
+          <div className="flex-1 overflow-y-auto p-1">{renderTagList()}</div>
         </div>
       </PopoverContent>
     </Popover>

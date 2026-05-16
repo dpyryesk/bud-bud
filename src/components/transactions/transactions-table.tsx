@@ -46,6 +46,7 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [tags, setTags] = useState<TagOptionWithLevel[]>([]);
+  const [sourceTags, setSourceTags] = useState<TagOptionWithLevel[]>([]);
   const [loading, setLoading] = useState(false);
   const [autoTagResult, setAutoTagResult] = useState<{
     total: number;
@@ -205,7 +206,9 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
       if (!res.ok) return;
       const data = await res.json();
       const categoryTags = data.filter((t: TagOption) => !t.isSource);
+      const srcTags = data.filter((t: TagOption) => t.isSource);
       setTags(buildTagsInDisplayOrder(categoryTags));
+      setSourceTags(buildTagsInDisplayOrder(srcTags));
     } catch {
       // non-critical
     }
@@ -321,6 +324,7 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
       {/* Toolbar / filter bar */}
       <TransactionsFilterBar
         availableTags={tags}
+        availableSourceTags={sourceTags}
         search={search}
         untaggedOnly={untaggedOnly}
         filterTagIds={filterTagIds}

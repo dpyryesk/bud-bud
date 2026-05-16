@@ -8,6 +8,8 @@ import type { TagOptionWithLevel } from './constants';
 
 export type TransactionsFilterBarProps = {
   availableTags: TagOptionWithLevel[];
+  /** Source tags shown below category tags in the filter dropdown. */
+  availableSourceTags?: TagOptionWithLevel[];
   /** Text search value (controlled by parent; debouncing is parent's responsibility) */
   search: string;
   untaggedOnly: boolean;
@@ -38,6 +40,7 @@ export type TransactionsFilterBarProps = {
 
 export function TransactionsFilterBar({
   availableTags,
+  availableSourceTags = [],
   search,
   untaggedOnly,
   filterTagIds,
@@ -55,6 +58,15 @@ export function TransactionsFilterBar({
   hideAdvancedFilters = false,
 }: TransactionsFilterBarProps) {
   const advancedActive = filterTagIds.length > 0 || minAmount !== '' || maxAmount !== '';
+
+  // Build sections for the dropdown: category tags first, then source tags (if any)
+  const tagSections =
+    availableSourceTags.length > 0
+      ? [
+          { label: 'Categories', tags: availableTags },
+          { label: 'Sources', tags: availableSourceTags },
+        ]
+      : undefined;
 
   return (
     <div className="space-y-2">
@@ -90,13 +102,14 @@ export function TransactionsFilterBar({
       {/* Row 2: tag filter + amount range (hidden in embedded/compact contexts) */}
       {!hideAdvancedFilters && (
         <div className="flex flex-wrap items-center gap-2">
-          {/* Tag multi-select */}
+          {/* Tag multi-select (includes source tags as a separate section) */}
           <div className="flex items-center gap-1.5">
             <Tag className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
             <div className="w-56">
               <TagSelectorDropdown
                 mode="multi"
-                tags={availableTags}
+                tags={tagSections ? undefined : availableTags}
+                sections={tagSections}
                 value={filterTagIds}
                 onToggle={onFilterTagToggle}
                 placeholder="Filter by tags…"
