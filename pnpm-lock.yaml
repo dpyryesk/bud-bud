@@ -3,12 +3,6 @@ lockfileVersion: '9.0'
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
-  onlyBuiltDependencies:
-    - '@prisma/engines'
-    - msw
-    - prisma
-    - sharp
-    - unrs-resolver
 
 importers:
 
