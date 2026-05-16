@@ -22,14 +22,40 @@ categories:
 
 ## Prerequisites
 
-Before you begin, make sure the following are installed on your machine:
+Choose **one** of the two options below. Docker is the easiest if you just want to run the app.
 
-- **[Node.js](https://nodejs.org/)** (v18 or later recommended)
-- **[pnpm](https://pnpm.io/installation)** (v8 or later recommended)
+| Option          | What you need                                                                    |
+| --------------- | -------------------------------------------------------------------------------- |
+| **A — Docker**  | [Docker Desktop](https://www.docker.com/products/docker-desktop/)                |
+| **B — Node.js** | [Node.js](https://nodejs.org/) v18+ and [pnpm](https://pnpm.io/installation) v8+ |
 
 ---
 
 ## Step 0 — Run the application
+
+### Option A — Docker (recommended)
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), then:
+
+```bash
+git clone https://github.com/dpyryesk/bud-bud.git
+cd bud-bud
+docker compose up
+```
+
+Docker builds the image on the first run (takes a few minutes), applies database migrations, and
+starts the server. Open [http://localhost:3000](http://localhost:3000).
+
+Your data is stored in `./data/bud.db` on the host and persists between restarts.
+
+| Command                     | What it does                       |
+| --------------------------- | ---------------------------------- |
+| `docker compose up`         | Start (build on first run)         |
+| `docker compose up --build` | Rebuild after pulling repo updates |
+| `Ctrl+C`                    | Stop the server                    |
+| `docker compose down`       | Stop and remove the container      |
+
+### Option B — Node.js / pnpm
 
 Clone the repository, then run:
 

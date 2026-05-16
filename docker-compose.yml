@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    ports:
+      - '3000:3000'
+    volumes:
+      # Persists the SQLite database between container restarts
+      - ./data:/app/data
+    environment:
+      DATABASE_URL: 'file:./data/bud.db'
+    restart: unless-stopped

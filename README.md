@@ -18,16 +18,36 @@ once for reuse.
 - Auto-tagging rules to speed up transaction categorization
 - Bi-weekly period support (handles two- or three-occurrence months correctly)
 
-## Prerequisites
+## Getting Started
+
+### Option A — Docker (recommended, no Node.js required)
+
+**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) (includes Docker Compose).
+
+```bash
+git clone https://github.com/dpyryesk/bud-bud.git
+cd bud-bud
+docker compose up
+```
+
+Docker builds the image, applies database migrations, and starts the server automatically.
+Open [http://localhost:3000](http://localhost:3000).
+
+Your data is stored in `./data/bud.db` on the host and persists between restarts.
+To stop: `Ctrl+C`. To stop and remove the container: `docker compose down`.
+
+> **Rebuild after pulling updates:** `docker compose up --build`
+
+### Option B — Node.js / pnpm
+
+**Prerequisites:**
 
 - **[Node.js](https://nodejs.org/)** (v18 or later recommended)
 - **[pnpm](https://pnpm.io/installation)** (v8 or later recommended)
 
-## Getting Started
-
-Clone the repository and run:
-
 ```bash
+git clone https://github.com/dpyryesk/bud-bud.git
+cd bud-bud
 pnpm bootstrap
 ```
 
@@ -36,6 +56,8 @@ to `.env` if the file does not exist, applies database migrations, builds the pr
 and starts the server.
 
 Open [http://localhost:3000](http://localhost:3000).
+
+Your data is stored in `./data/bud.db`.
 
 > **For active development** use `pnpm dev` instead. Run `pnpm db:migrate` and
 > `pnpm db:generate` once first to set up the database, then use `pnpm dev` for hot-reloading.

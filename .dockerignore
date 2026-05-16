@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+*.db
+*.db-journal
+data
+.env
+.env.local
+src/generated
+coverage
+plans

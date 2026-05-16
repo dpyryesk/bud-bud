@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
-    "setup": "pnpm install && node -e \"const fs=require('fs');if(!fs.existsSync('.env'))fs.copyFileSync('.env.example','.env');\" && prisma migrate deploy",
+    "setup": "pnpm install && node -e \"const fs=require('fs');if(!fs.existsSync('.env'))fs.copyFileSync('.env.example','.env');fs.mkdirSync('data',{recursive:true});\" && prisma migrate deploy",
     "bootstrap": "pnpm run setup && pnpm run build && pnpm run start",
     "lint": "eslint",
     "format": "prettier --write .",
