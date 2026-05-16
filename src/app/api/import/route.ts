@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
               },
             });
 
-            // Apply source tag if provided
+            // Apply overall source tag if provided
             if (sourceTagId) {
               await tx.transactionTag.create({
                 data: {
@@ -121,6 +121,22 @@ export async function POST(request: NextRequest) {
                   tagId: sourceTagId,
                 },
               });
+            }
+
+            // Apply per-value source tag if provided and different from overall tag
+            const sourceValueTagMap = mapping.sourceValueTagMap as
+              | Record<string, string>
+              | undefined;
+            if (sourceValueTagMap && rawSource && sourceValueTagMap[rawSource]) {
+              const valueTagId = sourceValueTagMap[rawSource];
+              if (valueTagId !== sourceTagId) {
+                await tx.transactionTag.create({
+                  data: {
+                    transactionId: transaction.id,
+                    tagId: valueTagId,
+                  },
+                });
+              }
             }
           });
 

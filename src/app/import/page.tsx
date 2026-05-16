@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Upload,
   FileSpreadsheet,
@@ -47,6 +47,7 @@ export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [csvRawPreview, setCsvRawPreview] = useState<string[][]>([]);
+  const [csvAllRows, setCsvAllRows] = useState<string[][]>([]);
 
   // Mapping config lists
   const [mappings, setMappings] = useState<CsvMapping[]>([]);
@@ -62,6 +63,7 @@ export default function ImportPage() {
   const [sourceColumn, setSourceColumn] = useState<string | null>('');
   const [dateFormat, setDateFormat] = useState('YYYY-MM-DD');
   const [sourceTagId, setSourceTagId] = useState<string | null>('');
+  const [sourceValueTagMap, setSourceValueTagMap] = useState<Record<string, string>>({});
   const [skipFirstRow, setSkipFirstRow] = useState(false);
 
   // Preview
@@ -122,6 +124,7 @@ export default function ImportPage() {
     setDateFormat('YYYY-MM-DD');
     setSkipFirstRow(false);
     setSourceTagId('');
+    setSourceValueTagMap({});
   }, []);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -145,6 +148,7 @@ export default function ImportPage() {
       const maxColumnCount = parsedRows.reduce((max, row) => Math.max(max, row.length), 0);
       const columns = Array.from({ length: maxColumnCount }, (_, i) => String(i + 1));
       setCsvHeaders(columns);
+      setCsvAllRows(parsedRows);
       setCsvRawPreview(parsedRows.slice(0, 5));
     }
   };
@@ -193,6 +197,10 @@ export default function ImportPage() {
 
   const getMappingForImport = () => {
     if (!dateColumn || !nameColumn || !debitColumn || !creditColumn) return null;
+    // Only include non-empty per-value tag mappings
+    const filteredValueTagMap = Object.fromEntries(
+      Object.entries(sourceValueTagMap).filter(([, v]) => v && v !== ''),
+    );
     return {
       name: mappingName,
       dateColumn,
@@ -202,6 +210,7 @@ export default function ImportPage() {
       sourceColumn: sourceColumn && sourceColumn !== 'none' ? sourceColumn : '',
       dateFormat,
       sourceTagId: sourceTagId && sourceTagId !== 'none' ? sourceTagId : null,
+      sourceValueTagMap: filteredValueTagMap,
       skipFirstRow,
     };
   };
@@ -274,17 +283,31 @@ export default function ImportPage() {
     setFile(null);
     setCsvHeaders([]);
     setCsvRawPreview([]);
+    setCsvAllRows([]);
     setPreview(null);
     setResult(null);
     setSelectedMappingId('');
     setSkipFirstRow(false);
+    setSourceValueTagMap({});
     setStep('upload');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const uniqueSourceValues = useMemo(() => {
+    if (!sourceColumn || sourceColumn === '_none') return [];
+    const colIndex = Number(sourceColumn) - 1;
+    if (colIndex < 0) return [];
+    const rowsToUse = skipFirstRow ? csvAllRows.slice(1) : csvAllRows;
+    const values = new Set<string>();
+    for (const row of rowsToUse) {
+      const val = (row[colIndex] || '').trim();
+      if (val) values.add(val);
+    }
+    return Array.from(values).sort();
+  }, [sourceColumn, csvAllRows, skipFirstRow]);
+
   const mappingIsReady = !!(dateColumn && nameColumn && debitColumn && creditColumn);
   const hasSourceColumn = preview?.rows.some((r) => r.source);
-  const selectedSourceTag = sourceTags.find((t) => t.id === sourceTagId);
 
   // ---- Render ----
 
@@ -617,7 +640,10 @@ export default function ImportPage() {
                   <Label>Source Column (optional)</Label>
                   <Select
                     value={sourceColumn || '_none'}
-                    onValueChange={(v) => setSourceColumn(v === '_none' ? '' : v)}
+                    onValueChange={(v) => {
+                      setSourceColumn(v === '_none' ? '' : v);
+                      setSourceValueTagMap({});
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="None" />
@@ -651,36 +677,114 @@ export default function ImportPage() {
 
               {/* Source tag */}
               {sourceTags.length > 0 && (
-                <div>
-                  <Label>Source Tag</Label>
-                  <Select
-                    value={sourceTagId || '_none'}
-                    onValueChange={(v) => setSourceTagId(v === '_none' ? '' : v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="None">
-                        {selectedSourceTag ? selectedSourceTag.name : 'None'}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_none">None</SelectItem>
-                      {sourceTags.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          <span className="flex items-center gap-1.5">
-                            <span
-                              className="inline-block h-2.5 w-2.5 rounded-full"
-                              style={{ backgroundColor: t.color }}
-                            />
-                            {t.name}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    All imported transactions will be tagged with this source tag.
-                  </p>
-                </div>
+                <>
+                  <div>
+                    <Label>Source Tag</Label>
+                    <Select
+                      value={sourceTagId || '_none'}
+                      onValueChange={(v) => setSourceTagId(v === '_none' ? '' : v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="None">
+                          {(v: string | null) => {
+                            if (!v || v === '_none') return 'None';
+                            const tag = sourceTags.find((t) => t.id === v);
+                            return tag ? (
+                              <span className="flex items-center gap-1.5">
+                                <span
+                                  className="inline-block h-2.5 w-2.5 rounded-full"
+                                  style={{ backgroundColor: tag.color }}
+                                />
+                                {tag.name}
+                              </span>
+                            ) : (
+                              'None'
+                            );
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">None</SelectItem>
+                        {sourceTags.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            <span className="flex items-center gap-1.5">
+                              <span
+                                className="inline-block h-2.5 w-2.5 rounded-full"
+                                style={{ backgroundColor: t.color }}
+                              />
+                              {t.name}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      All imported transactions will be tagged with this source tag.
+                    </p>
+                  </div>
+
+                  {/* Source value tag mapping */}
+                  {sourceColumn && sourceColumn !== '_none' && uniqueSourceValues.length > 0 && (
+                    <div className="rounded-md border p-3">
+                      <p className="text-sm font-medium">Source Value Tags</p>
+                      <p className="text-muted-foreground mt-0.5 mb-3 text-xs">
+                        Optionally map specific source values to additional source tags.
+                        Transactions with a mapped value will receive both the overall source tag
+                        and the value-specific tag.
+                      </p>
+                      <div className="space-y-2">
+                        {uniqueSourceValues.map((value) => (
+                          <div key={value} className="flex items-center gap-3">
+                            <span className="bg-muted min-w-0 flex-1 truncate rounded px-2 py-1 font-mono text-xs">
+                              {value}
+                            </span>
+                            <Select
+                              value={sourceValueTagMap[value] || '_none'}
+                              onValueChange={(v) => {
+                                const tagId = v && v !== '_none' ? v : '';
+                                setSourceValueTagMap((prev) => ({ ...prev, [value]: tagId }));
+                              }}
+                            >
+                              <SelectTrigger className="w-48 shrink-0">
+                                <SelectValue>
+                                  {(v: string | null) => {
+                                    if (!v || v === '_none') return 'No tag';
+                                    const tag = sourceTags.find((t) => t.id === v);
+                                    return tag ? (
+                                      <span className="flex items-center gap-1.5">
+                                        <span
+                                          className="inline-block h-2.5 w-2.5 rounded-full"
+                                          style={{ backgroundColor: tag.color }}
+                                        />
+                                        {tag.name}
+                                      </span>
+                                    ) : (
+                                      'No tag'
+                                    );
+                                  }}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="_none">No tag</SelectItem>
+                                {sourceTags.map((t) => (
+                                  <SelectItem key={t.id} value={t.id}>
+                                    <span className="flex items-center gap-1.5">
+                                      <span
+                                        className="inline-block h-2.5 w-2.5 rounded-full"
+                                        style={{ backgroundColor: t.color }}
+                                      />
+                                      {t.name}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Save mapping */}
