@@ -29,6 +29,15 @@
       "prettier --write"
     ]
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/engines",
+      "msw",
+      "prisma",
+      "sharp",
+      "unrs-resolver"
+    ]
+  },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
     "@dnd-kit/core": "^6.3.1",
