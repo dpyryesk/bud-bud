@@ -20,6 +20,15 @@ categories:
 
 ---
 
+## Prerequisites
+
+Before you begin, make sure the following are installed on your machine:
+
+- **[Node.js](https://nodejs.org/)** (v18 or later recommended)
+- **[pnpm](https://pnpm.io/installation)** (v8 or later recommended)
+
+---
+
 ## Step 0 — Run the application
 
 Clone the repository, then run:

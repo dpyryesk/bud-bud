@@ -8,6 +8,7 @@ import { useTimePeriod } from '@/hooks/use-time-period';
 import { getYearlyAmount } from '@/lib/date-utils';
 import { IncomeSourcesCard } from '@/components/dashboard/income-sources-card';
 import { ExpensesTable } from '@/components/dashboard/expenses-table';
+import { SpendingCharts, type MonthlyTrendPoint } from '@/components/dashboard/spending-charts';
 import { BudgetSummaryCards } from '@/components/budget/budget-summary-cards';
 import {
   SummaryTransactionsPanel,
@@ -112,6 +113,9 @@ export default function DashboardPage() {
 
   // Income sources
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
+
+  // Monthly trend (for charts)
+  const [monthlyTrend, setMonthlyTrend] = useState<MonthlyTrendPoint[]>([]);
 
   // ---- Derived values ----
 
@@ -239,6 +243,18 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const fetchMonthlyTrend = useCallback(async () => {
+    try {
+      const year = yearPeriod.start.getFullYear();
+      const res = await fetch(`/api/dashboard/monthly-trend?year=${year}`);
+      if (res.ok) {
+        setMonthlyTrend((await res.json()) as MonthlyTrendPoint[]);
+      }
+    } catch {
+      // non-critical — charts just won't display trend
+    }
+  }, [yearPeriod]);
+
   useEffect(() => {
     const id = setTimeout(() => {
       void fetchYearlySummary();
@@ -277,6 +293,13 @@ export default function DashboardPage() {
     }, 0);
     return () => clearTimeout(id);
   }, [activeBudget, fetchIncomeSources]);
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      void fetchMonthlyTrend();
+    }, 0);
+    return () => clearTimeout(id);
+  }, [fetchMonthlyTrend]);
 
   // ---- Handlers ----
 
@@ -361,10 +384,18 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* 2. Expected Income */}
+          {/* 2. Year-at-a-glance charts */}
+          <SpendingCharts
+            summaryLines={yearSummaryLines}
+            orderedCategories={orderedCategories}
+            monthlyTrend={monthlyTrend}
+            viewYear={yearPeriod.start.getFullYear()}
+          />
+
+          {/* 3. Expected Income */}
           <IncomeSourcesCard incomeSources={incomeSources} />
 
-          {/* 3. Table of Expenses */}
+          {/* 4. Table of Expenses */}
           <ExpensesTable
             summaryLines={yearSummaryLines}
             orderedCategories={orderedCategories}

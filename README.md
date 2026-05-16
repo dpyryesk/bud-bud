@@ -18,6 +18,11 @@ once for reuse.
 - Auto-tagging rules to speed up transaction categorization
 - Bi-weekly period support (handles two- or three-occurrence months correctly)
 
+## Prerequisites
+
+- **[Node.js](https://nodejs.org/)** (v18 or later recommended)
+- **[pnpm](https://pnpm.io/installation)** (v8 or later recommended)
+
 ## Getting Started
 
 Clone the repository and run:
