@@ -1,6 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// DELETE /api/transactions/:id/tags - Remove a specific tag from a transaction
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  let tagId: string | undefined;
+  try {
+    const body = await request.json();
+    tagId = (body as { tagId?: string }).tagId;
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  if (!tagId) {
+    return NextResponse.json({ error: 'tagId is required' }, { status: 400 });
+  }
+
+  try {
+    await prisma.transactionTag.deleteMany({
+      where: { transactionId: id, tagId },
+    });
+
+    const transaction = await prisma.transaction.findUnique({
+      where: { id },
+      include: {
+        tags: {
+          include: {
+            tag: { select: { id: true, name: true, color: true, isSource: true } },
+          },
+        },
+      },
+    });
+
+    return NextResponse.json({
+      ...transaction,
+      tags: transaction?.tags.map((tt) => tt.tag) ?? [],
+    });
+  } catch {
+    return NextResponse.json({ error: 'Failed to remove tag' }, { status: 500 });
+  }
+}
+
 // POST /api/transactions/:id/tags - Set tags for a transaction
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

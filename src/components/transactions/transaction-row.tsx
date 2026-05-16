@@ -32,6 +32,11 @@ interface TransactionRowProps {
     tagIds: string[],
     previousTags: TransactionWithTags['tags'],
   ) => Promise<TransactionWithTags['tags']>;
+  onRemoveTag: (
+    id: string,
+    tagId: string,
+    previousTags: TransactionWithTags['tags'],
+  ) => Promise<TransactionWithTags['tags']>;
   onUpdateNotes: (id: string, notes: string) => void;
   onRuleCreated: (applied: boolean) => void;
   onArchive?: (id: string) => void;
@@ -41,6 +46,7 @@ export function TransactionRow({
   transaction,
   availableTags,
   onSetTags,
+  onRemoveTag,
   onUpdateNotes,
   onRuleCreated,
   onArchive,
@@ -73,6 +79,19 @@ export function TransactionRow({
     }
   };
 
+  const removeSourceTag = async (tagId: string) => {
+    const previousTags = localTags;
+    setLocalTags(localTags.filter((t) => t.id !== tagId));
+
+    tagRequestSeqRef.current += 1;
+    const seq = tagRequestSeqRef.current;
+
+    const confirmed = await onRemoveTag(transaction.id, tagId, previousTags);
+    if (seq === tagRequestSeqRef.current) {
+      setLocalTags(confirmed);
+    }
+  };
+
   return (
     <>
       <TableRow>
@@ -90,7 +109,14 @@ export function TransactionRow({
           {sourceTags.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
               {sourceTags.map((t) => (
-                <TagBadge key={t.id} name={t.name} color={t.color} isSource className="text-xs" />
+                <TagBadge
+                  key={t.id}
+                  name={t.name}
+                  color={t.color}
+                  isSource
+                  onRemoveAction={() => void removeSourceTag(t.id)}
+                  className="text-xs"
+                />
               ))}
             </div>
           )}

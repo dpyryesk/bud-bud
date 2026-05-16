@@ -257,6 +257,29 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
     [handleTagsUpdated],
   );
 
+  const handleRemoveTag = useCallback(
+    async (
+      transactionId: string,
+      tagId: string,
+      previousTags: TransactionWithTags['tags'],
+    ): Promise<TransactionWithTags['tags']> => {
+      const res = await fetch(`/api/transactions/${transactionId}/tags`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tagId }),
+      });
+      if (!res.ok) {
+        handleTagsUpdated(transactionId, previousTags);
+        return previousTags;
+      }
+      const data = await res.json();
+      const updatedTags: TransactionWithTags['tags'] = data.tags ?? previousTags;
+      handleTagsUpdated(transactionId, updatedTags);
+      return updatedTags;
+    },
+    [handleTagsUpdated],
+  );
+
   const handleUpdateNotes = useCallback(async (transactionId: string, notes: string) => {
     const res = await fetch(`/api/transactions/${transactionId}`, {
       method: 'PATCH',
@@ -397,6 +420,7 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
                   transaction={tx}
                   availableTags={tags}
                   onSetTags={handleSetTags}
+                  onRemoveTag={handleRemoveTag}
                   onUpdateNotes={handleUpdateNotes}
                   onRuleCreated={handleRuleCreated}
                   onArchive={handleArchive}

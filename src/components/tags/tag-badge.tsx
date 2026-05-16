@@ -24,7 +24,12 @@ export function TagBadge({ name, color, isSource, className, onRemoveAction }: T
       {isSource && '💳 '}
       {name}
       {onRemoveAction && (
-        <button onClick={onRemoveAction} className="ml-1 hover:opacity-70">
+        <button
+          type="button"
+          aria-label={`Remove tag ${name}`}
+          onClick={onRemoveAction}
+          className="ml-1 hover:opacity-70"
+        >
           ×
         </button>
       )}
