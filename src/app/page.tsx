@@ -20,6 +20,8 @@ import type {
   Budget,
   BudgetSummaryLine,
   BudgetCategory,
+  DashboardSummaryResponse,
+  DashboardTagBreakdownItem,
   IncomeSource,
   TimePeriod,
 } from '@/types';
@@ -116,6 +118,8 @@ export default function DashboardPage() {
 
   // Monthly trend (for charts)
   const [monthlyTrend, setMonthlyTrend] = useState<MonthlyTrendPoint[]>([]);
+  const [spendingByTag, setSpendingByTag] = useState<DashboardTagBreakdownItem[]>([]);
+  const [sourceTagTotals, setSourceTagTotals] = useState<DashboardTagBreakdownItem[]>([]);
 
   // ---- Derived values ----
 
@@ -255,6 +259,27 @@ export default function DashboardPage() {
     }
   }, [yearPeriod]);
 
+  const fetchDashboardSummary = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({
+        start: format(yearPeriod.start, 'yyyy-MM-dd'),
+        end: format(yearPeriod.end, 'yyyy-MM-dd'),
+      });
+      const res = await fetch(`/api/dashboard?${params}`);
+      if (!res.ok) {
+        setSpendingByTag([]);
+        setSourceTagTotals([]);
+        return;
+      }
+      const data = (await res.json()) as DashboardSummaryResponse;
+      setSpendingByTag(data.spendingByTag ?? []);
+      setSourceTagTotals(data.sourceTagTotals ?? []);
+    } catch {
+      setSpendingByTag([]);
+      setSourceTagTotals([]);
+    }
+  }, [yearPeriod]);
+
   useEffect(() => {
     const id = setTimeout(() => {
       void fetchYearlySummary();
@@ -300,6 +325,13 @@ export default function DashboardPage() {
     }, 0);
     return () => clearTimeout(id);
   }, [fetchMonthlyTrend]);
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      void fetchDashboardSummary();
+    }, 0);
+    return () => clearTimeout(id);
+  }, [fetchDashboardSummary]);
 
   // ---- Handlers ----
 
@@ -389,6 +421,8 @@ export default function DashboardPage() {
             summaryLines={yearSummaryLines}
             orderedCategories={orderedCategories}
             monthlyTrend={monthlyTrend}
+            spendingByTag={spendingByTag}
+            sourceTagTotals={sourceTagTotals}
             viewYear={yearPeriod.start.getFullYear()}
           />
 

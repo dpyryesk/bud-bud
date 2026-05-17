@@ -35,27 +35,72 @@ export async function GET(request: NextRequest) {
   const net = totalIncome - totalSpending;
   const count = transactions.length;
 
-  // Spending by tag (non-source only)
-  const tagSpending: Record<string, { name: string; color: string; amount: number }> = {};
+  // Spending by tag (non-source only), considering debits and credits
+  const tagSpending: Record<string, { id: string; name: string; color: string; spending: number }> =
+    {};
+  const sourceTagTotals: Record<
+    string,
+    { id: string; name: string; color: string; spending: number; income: number; total: number }
+  > = {};
+
   for (const tx of transactions) {
+    const netTxAmount = tx.debit - tx.credit;
+    const txSpending = netTxAmount > 0 ? netTxAmount : 0;
+    const txIncome = netTxAmount < 0 ? Math.abs(netTxAmount) : 0;
+
     const nonSourceTags = tx.tags.filter((tt) => !tt.tag.isSource);
     if (nonSourceTags.length === 0) {
       const key = 'untagged';
-      if (!tagSpending[key]) tagSpending[key] = { name: 'Untagged', color: '#9CA3AF', amount: 0 };
-      tagSpending[key].amount += tx.debit;
+      if (!tagSpending[key]) {
+        tagSpending[key] = {
+          id: key,
+          name: 'Untagged',
+          color: '#9CA3AF',
+          spending: 0,
+        };
+      }
+      tagSpending[key].spending += txSpending;
     } else {
       for (const tt of nonSourceTags) {
         if (!tagSpending[tt.tag.id]) {
-          tagSpending[tt.tag.id] = { name: tt.tag.name, color: tt.tag.color, amount: 0 };
+          tagSpending[tt.tag.id] = {
+            id: tt.tag.id,
+            name: tt.tag.name,
+            color: tt.tag.color,
+            spending: 0,
+          };
         }
-        tagSpending[tt.tag.id].amount += tx.debit / nonSourceTags.length;
+        tagSpending[tt.tag.id].spending += txSpending / nonSourceTags.length;
+      }
+    }
+
+    const sourceTags = tx.tags.filter((tt) => tt.tag.isSource);
+    if (sourceTags.length > 0) {
+      for (const tt of sourceTags) {
+        if (!sourceTagTotals[tt.tag.id]) {
+          sourceTagTotals[tt.tag.id] = {
+            id: tt.tag.id,
+            name: tt.tag.name,
+            color: tt.tag.color,
+            spending: 0,
+            income: 0,
+            total: 0,
+          };
+        }
+
+        sourceTagTotals[tt.tag.id].spending += txSpending / sourceTags.length;
+        sourceTagTotals[tt.tag.id].income += txIncome / sourceTags.length;
+        sourceTagTotals[tt.tag.id].total += netTxAmount / sourceTags.length;
       }
     }
   }
 
   const spendingByTag = Object.values(tagSpending)
-    .filter((t) => t.amount > 0)
-    .sort((a, b) => b.amount - a.amount);
+    .filter((t) => t.spending > 0)
+    .map((t) => ({ ...t, income: 0, total: t.spending }))
+    .sort((a, b) => b.spending - a.spending);
+
+  const sourceTagBreakdown = Object.values(sourceTagTotals).sort((a, b) => b.spending - a.spending);
 
   return NextResponse.json({
     totalIncome,
@@ -63,5 +108,6 @@ export async function GET(request: NextRequest) {
     net,
     count,
     spendingByTag,
+    sourceTagTotals: sourceTagBreakdown,
   });
 }

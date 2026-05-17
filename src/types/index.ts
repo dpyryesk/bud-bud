@@ -84,6 +84,24 @@ export type BudgetSummaryResponse = {
   totalDebits: number;
 };
 
+export type DashboardTagBreakdownItem = {
+  id: string;
+  name: string;
+  color: string;
+  spending: number;
+  income: number;
+  total: number;
+};
+
+export type DashboardSummaryResponse = {
+  totalIncome: number;
+  totalSpending: number;
+  net: number;
+  count: number;
+  spendingByTag: DashboardTagBreakdownItem[];
+  sourceTagTotals: DashboardTagBreakdownItem[];
+};
+
 // ---- Income & Untracked types ----
 
 export type IncomeSource = {
