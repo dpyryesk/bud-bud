@@ -166,7 +166,7 @@ export function SpendingCharts({
         total: Math.abs(Math.round(t.total)),
         totalFill: t.total < 0 ? CHART_COLORS.positive : CHART_COLORS.negative,
       }));
-  }, [sourceTagTotals, CHART_COLORS.spending, CHART_COLORS.negative]);
+  }, [sourceTagTotals, CHART_COLORS.negative, CHART_COLORS.positive]);
 
   const categoryDonutData = useMemo(() => {
     return categoryData
