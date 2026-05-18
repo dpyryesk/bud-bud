@@ -12,6 +12,7 @@ import {
   Archive,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SidebarTodosCard } from './sidebar-todos-card';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -27,7 +28,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="bg-sidebar border-sidebar-border hidden w-56 border-r md:block">
+    <aside className="bg-sidebar border-sidebar-border hidden w-56 flex-col border-r md:flex">
       <nav className="flex flex-col gap-0.5 p-3">
         {NAV_ITEMS.map((item) => {
           const isActive = pathname === item.href;
@@ -52,6 +53,7 @@ export function Sidebar() {
           );
         })}
       </nav>
+      <SidebarTodosCard />
     </aside>
   );
 }

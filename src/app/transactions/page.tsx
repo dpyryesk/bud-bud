@@ -1,10 +1,14 @@
 'use client';
 
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useTimePeriod } from '@/hooks/use-time-period';
 import { TransactionsTable } from '@/components/transactions/transactions-table';
 
-export default function TransactionsPage() {
+function TransactionsContent() {
   const { period } = useTimePeriod();
+  const searchParams = useSearchParams();
+  const initialUntaggedOnly = searchParams.get('untaggedOnly') === 'true';
 
   return (
     <div className="space-y-4">
@@ -14,7 +18,15 @@ export default function TransactionsPage() {
         <p className="text-muted-foreground text-sm">Viewing: {period.label}</p>
       </div>
 
-      <TransactionsTable />
+      <TransactionsTable initialUntaggedOnly={initialUntaggedOnly} />
     </div>
+  );
+}
+
+export default function TransactionsPage() {
+  return (
+    <Suspense>
+      <TransactionsContent />
+    </Suspense>
   );
 }

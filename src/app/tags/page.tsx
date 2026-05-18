@@ -412,7 +412,9 @@ export default function TagsPage() {
         <Separator />
 
         {/* Auto-Tag Rules */}
-        <AutoTagRulesSection categoryTags={categoryTagsInDisplayOrder} />
+        <div id="auto-tag-rules">
+          <AutoTagRulesSection categoryTags={categoryTagsInDisplayOrder} />
+        </div>
       </div>
     </div>
   );

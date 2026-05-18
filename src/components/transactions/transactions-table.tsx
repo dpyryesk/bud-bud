@@ -22,16 +22,22 @@ import { TransactionsFilterBar } from './transactions-filter-bar';
 interface TransactionsTableProps {
   /** Extra query params forwarded to /api/transactions (e.g. { unbudgeted: 'true' }) */
   extraParams?: Record<string, string>;
+  /** Pre-activate the "Untagged only" filter on first render (e.g. when navigated from the sidebar checklist) */
+  initialUntaggedOnly?: boolean;
 }
 
-export function TransactionsTable({ extraParams }: TransactionsTableProps) {
+export function TransactionsTable({
+  extraParams,
+  initialUntaggedOnly = false,
+}: TransactionsTableProps) {
   const { period } = useTimePeriod();
 
   // ---- Filter state ----
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [untaggedOnly, setUntaggedOnly] = useState(false);
+  const [untaggedOnly, setUntaggedOnly] = useState(initialUntaggedOnly);
   const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
+  const [prevInitialUntaggedOnly, setPrevInitialUntaggedOnly] = useState(initialUntaggedOnly);
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
   const [debouncedMinAmount, setDebouncedMinAmount] = useState('');
@@ -83,6 +89,18 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
 
   // pageState bundles page + the scope it belongs to so we can reset atomically
   const [pageState, setPageState] = useState({ page: 1, scopeKey });
+
+  // Keep URL-driven initial filter in sync when this page stays mounted
+  // and only search params change (e.g. navigating to /transactions?untaggedOnly=true).
+  // Use the derived-state-during-render pattern to avoid setState-in-effect lint errors.
+  if (prevInitialUntaggedOnly !== initialUntaggedOnly) {
+    setPrevInitialUntaggedOnly(initialUntaggedOnly);
+    setUntaggedOnly(initialUntaggedOnly);
+    if (initialUntaggedOnly) {
+      setFilterTagIds([]);
+    }
+    setPageState((prev) => ({ ...prev, page: 1 }));
+  }
 
   // Derive the effective page: reset to 1 whenever the scope changes.
   const effectivePage = pageState.scopeKey === scopeKey ? pageState.page : 1;

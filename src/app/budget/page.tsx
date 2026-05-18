@@ -682,13 +682,15 @@ export default function BudgetPage() {
       </div>
 
       {/* Yearly Untracked Spending */}
-      <UntrackedCategoriesSection
-        budgetId={activeBudget?.id ?? null}
-        period={yearPeriod}
-        totalYearlyNetIncome={totalYearlyNetIncome}
-        availableTags={tags}
-        title="Yearly Untracked Spending"
-      />
+      <div id="yearly-untracked">
+        <UntrackedCategoriesSection
+          budgetId={activeBudget?.id ?? null}
+          period={yearPeriod}
+          totalYearlyNetIncome={totalYearlyNetIncome}
+          availableTags={tags}
+          title="Yearly Untracked Spending"
+        />
+      </div>
 
       {/* Untracked Transactions */}
       <Card>
