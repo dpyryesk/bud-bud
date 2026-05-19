@@ -75,6 +75,8 @@ export type BudgetSummaryLine = {
   remaining: number;
   rolloverAmount: number;
   effectiveBudget: number;
+  fitStatus: FitStatus;
+  fitMonthCount: number;
 };
 
 export type BudgetSummaryResponse = {
@@ -181,6 +183,47 @@ export type AutoTagRuleData = {
   matchType: 'exact' | 'regex';
   tagId: string;
   tag: TagFlat;
+};
+
+// ---- Budget fit types ----
+
+export type FitStatus = 'green' | 'yellow' | 'red' | 'insufficient';
+
+// ---- Fine Tune types ----
+
+export type FineTuneMonthlyDataPoint = {
+  month: string; // "2024-01"
+  spending: number;
+  transactionCount: number;
+};
+
+export type FineTuneStats = {
+  average: number;
+  stdDev: number;
+  min: number;
+  max: number;
+  cv: number; // coefficient of variation
+  monthCount: number;
+  nonZeroMonthCount: number;
+  totalSpending: number;
+  highestMonth: string | null;
+  lowestNonZeroMonth: string | null;
+};
+
+export type FineTuneAnalysisResponse = {
+  budgetLine: BudgetLineWithTags;
+  activeBudget: { id: string; startDate: string };
+  monthlyData: FineTuneMonthlyDataPoint[];
+  stats: FineTuneStats;
+  totalYearlyIncome: number;
+  totalYearlyBudget: number; // all OTHER lines annualized
+};
+
+export type FineTuneDraftConfig = {
+  tagIds: string[];
+  amount: number;
+  period: BudgetPeriodType;
+  rollover: boolean;
 };
 
 // Re-export

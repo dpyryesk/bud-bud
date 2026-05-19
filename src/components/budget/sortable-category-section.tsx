@@ -96,6 +96,8 @@ export function SortableCategorySection({
 
         {/* Subtotals */}
         <div className="text-right text-sm tabular-nums">{formatCurrency(subtotalBudget)}</div>
+        {/* Fit — empty for category rows */}
+        <div />
         <div className="text-muted-foreground text-right text-sm tabular-nums">
           {subtotalRollover !== 0 ? formatCurrency(subtotalRollover) : '—'}
         </div>

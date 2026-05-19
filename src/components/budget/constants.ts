@@ -13,5 +13,6 @@ export type TagOption = {
 export type TagOptionWithLevel = TagWithLevel<TagOption>;
 
 // ---- Grid layout shared by header, category, and line rows ----
+// Columns: drag | name | tags | period | budget | fit | rollover | actual | remaining | actions
 export const ROW_GRID =
-  'grid grid-cols-[2rem_minmax(8rem,1fr)_minmax(8rem,1fr)_5rem_7rem_7rem_7rem_7rem_5rem] items-center gap-x-3';
+  'grid grid-cols-[2rem_minmax(8rem,1fr)_minmax(8rem,1fr)_5rem_7rem_5rem_7rem_7rem_7rem_5rem] items-center gap-x-3';

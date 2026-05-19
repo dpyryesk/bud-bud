@@ -10,6 +10,7 @@ import {
   PiggyBank,
   Settings,
   Archive,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { href: '/transactions/archived', label: 'Archived', icon: Archive },
   { href: '/tags', label: 'Tags', icon: Tags },
   { href: '/budget', label: 'Budget', icon: PiggyBank },
+  { href: '/budget/fine-tune', label: 'Fine Tune', icon: SlidersHorizontal },
   { href: '/budgets', label: 'Manage Budgets', icon: Settings },
 ] as const;
 

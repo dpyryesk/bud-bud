@@ -38,6 +38,8 @@ export function UncategorizedSection({
         <div /> {/* no drag handle */}
         <div className="text-muted-foreground col-span-3 text-sm">Uncategorized</div>
         <div className="text-right text-sm tabular-nums">{formatCurrency(subtotalBudget)}</div>
+        {/* Fit — empty for section headers */}
+        <div />
         <div className="text-muted-foreground text-right text-sm tabular-nums">
           {subtotalRollover !== 0 ? formatCurrency(subtotalRollover) : '—'}
         </div>

@@ -3,10 +3,41 @@ import { prisma } from '@/lib/prisma';
 import {
   scaleBudgetAmount,
   getCompletePeriodsBetween,
+  getYearlyAmount,
   type BudgetPeriodType,
 } from '@/lib/date-utils';
 import type { Budget } from '@/generated/prisma/client';
 import { collectDescendantTagIds } from '@/lib/tag-tree';
+import type { FitStatus } from '@/types';
+
+// Fit thresholds — must match src/components/fine-tune/constants.ts
+const FIT_GREEN_THRESHOLD = 0.1; // ≤ 10% delta → green
+const FIT_YELLOW_THRESHOLD = 0.25; // ≤ 25% delta → yellow
+
+/** Build a yyyy-MM key from a Date using UTC fields to avoid local-timezone drift. */
+function utcMonthKey(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Compute fit status for a budget line given its projected yearly amount
+ * vs. average monthly spending over the full history.
+ * Uses a 3-month minimum threshold (stricter than fine-tune's 2-month threshold)
+ * to avoid showing misleading colour when data is scarce.
+ */
+function computeFitStatus(
+  projectedYearly: number,
+  averageMonthlySpending: number,
+  monthCount: number,
+): FitStatus {
+  if (monthCount < 3) return 'insufficient';
+  const expectedYearly = averageMonthlySpending * 12;
+  if (expectedYearly === 0) return 'insufficient';
+  const delta = Math.abs(projectedYearly - expectedYearly) / expectedYearly;
+  if (delta <= FIT_GREEN_THRESHOLD) return 'green';
+  if (delta <= FIT_YELLOW_THRESHOLD) return 'yellow';
+  return 'red';
+}
 
 /**
  * Return the latest budget whose startDate <= date.
@@ -147,6 +178,34 @@ export async function GET(request: NextRequest) {
   const effectiveStart =
     rolloverHistoryStart < viewPeriod.start ? rolloverHistoryStart : viewPeriod.start;
 
+  // --- Fit data date range ---
+  // Fit is always computed from budget start to the last fully complete month,
+  // regardless of the selected view period. This mirrors the analysis endpoint logic.
+  const today = new Date();
+  let fitLastMonth = today.getUTCMonth() - 1; // 0-indexed
+  let fitLastYear = today.getUTCFullYear();
+  if (fitLastMonth < 0) {
+    fitLastMonth = 11;
+    fitLastYear -= 1;
+  }
+  // End of the last complete month (UTC end-of-day)
+  const fitPeriodEnd = new Date(Date.UTC(fitLastYear, fitLastMonth + 1, 0, 23, 59, 59, 999));
+  const fitPeriodStart = new Date(applicableBudget.startDate);
+
+  // Build the list of complete months for fit calculation
+  const fitMonthList: string[] = [];
+  let mYear = fitPeriodStart.getUTCFullYear();
+  let mMonth = fitPeriodStart.getUTCMonth(); // 0-indexed
+  while (mYear < fitLastYear || (mYear === fitLastYear && mMonth <= fitLastMonth)) {
+    fitMonthList.push(`${mYear}-${String(mMonth + 1).padStart(2, '0')}`);
+    mMonth += 1;
+    if (mMonth === 12) {
+      mMonth = 0;
+      mYear += 1;
+    }
+  }
+  const fitMonthCount = fitMonthList.length;
+
   // Load ALL transactions we'll ever need in one query (exclude archived)
   const allTransactions = await prisma.transaction.findMany({
     where: {
@@ -164,6 +223,23 @@ export async function GET(request: NextRequest) {
       },
     },
   });
+
+  // Load fit-period transactions separately if needed (budget start → last complete month).
+  // This covers cases where the view period doesn't overlap with the full fit range.
+  const fitTransactions =
+    fitMonthCount > 0 && fitPeriodStart <= fitPeriodEnd
+      ? await prisma.transaction.findMany({
+          where: {
+            date: { gte: fitPeriodStart, lte: fitPeriodEnd },
+            archived: false,
+          },
+          include: {
+            tags: {
+              include: { tag: { select: { id: true, isSource: true } } },
+            },
+          },
+        })
+      : [];
 
   // Split transactions into current-period and historical buckets
   const currentPeriodTxs = allTransactions.filter(
@@ -199,6 +275,36 @@ export async function GET(request: NextRequest) {
   const budgetActuals = new Map<string, number>();
   for (const [blId, tagSet] of budgetLineTagSets) {
     budgetActuals.set(blId, computeActual(currentPeriodTxs, tagSet));
+  }
+
+  // --- Compute fit status per budget line from full historical data ---
+  // For each line: sum spending per complete month, compute average, then assess fit.
+  const budgetLineFitMap = new Map<string, { fitStatus: FitStatus; fitMonthCount: number }>();
+  for (const [blId, tagSet] of budgetLineTagSets) {
+    // Accumulate spending per month key
+    const monthSpending = new Map<string, number>();
+    for (const tx of fitTransactions) {
+      const nonSourceTagIds = tx.tags.filter((tt) => !tt.tag.isSource).map((tt) => tt.tag.id);
+      if (nonSourceTagIds.length === 0) continue;
+      if (!nonSourceTagIds.some((tid) => tagSet.has(tid))) continue;
+      const key = utcMonthKey(new Date(tx.date));
+      const net = tx.debit - tx.credit;
+      monthSpending.set(key, (monthSpending.get(key) ?? 0) + net);
+    }
+
+    // Build spending values aligned to the complete month list
+    const spendingValues = fitMonthList.map((m) => Math.max(0, monthSpending.get(m) ?? 0));
+    const totalSpending = spendingValues.reduce((a, b) => a + b, 0);
+    const average = fitMonthCount > 0 ? totalSpending / fitMonthCount : 0;
+
+    // Find the budget line to get its amount & period for projected yearly
+    const bl = budgetLines.find((b) => b.id === blId);
+    const projectedYearly = bl ? getYearlyAmount(bl.amount, bl.period as BudgetPeriodType) : 0;
+
+    budgetLineFitMap.set(blId, {
+      fitStatus: computeFitStatus(projectedYearly, average, fitMonthCount),
+      fitMonthCount,
+    });
   }
 
   // Calculate summary lines (rollover computed fully in memory)
@@ -252,6 +358,11 @@ export async function GET(request: NextRequest) {
     // Look up category details
     const category = bl.categoryId ? (categoryMap.get(bl.categoryId) ?? null) : null;
 
+    const fitData = budgetLineFitMap.get(bl.id) ?? {
+      fitStatus: 'insufficient' as FitStatus,
+      fitMonthCount: 0,
+    };
+
     summaryLines.push({
       budgetLine: {
         id: bl.id,
@@ -269,6 +380,8 @@ export async function GET(request: NextRequest) {
       remaining,
       rolloverAmount,
       effectiveBudget,
+      fitStatus: fitData.fitStatus,
+      fitMonthCount: fitData.fitMonthCount,
     });
   }
 

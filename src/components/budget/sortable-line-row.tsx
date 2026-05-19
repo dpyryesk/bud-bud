@@ -1,14 +1,16 @@
 'use client';
 
-import { GripVertical, Pencil, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { GripVertical, Pencil, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { TagBadge } from '@/components/tags/tag-badge';
 import { formatCurrency } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
 import { ROW_GRID } from './constants';
 import type { BudgetSummaryLine } from '@/types';
+import type { FitStatus } from '@/types';
 
 interface SelectedTag {
   id: string;
@@ -23,10 +25,26 @@ interface SortableLineRowProps {
   onTagClick?: (tag: SelectedTag) => void;
 }
 
+const FIT_DOT_COLORS: Record<FitStatus, string> = {
+  green: 'bg-green-500 ring-green-300',
+  yellow: 'bg-yellow-400 ring-yellow-300',
+  red: 'bg-red-500 ring-red-300',
+  insufficient: 'bg-gray-400 ring-gray-300',
+};
+
+const FIT_TOOLTIPS: Record<FitStatus, string> = {
+  green: 'Good fit — budget closely matches historical spending',
+  yellow: 'Moderate fit — budget moderately matches historical spending',
+  red: 'Poor fit — budget significantly differs from historical spending',
+  insufficient: 'Insufficient data — need at least 3 months of history to assess fit',
+};
+
 export function SortableLineRow({ line, onEdit, onDelete, onTagClick }: SortableLineRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: line.budgetLine.id,
   });
+
+  const fitStatus: FitStatus = line.fitStatus ?? 'insufficient';
 
   return (
     <div
@@ -86,6 +104,28 @@ export function SortableLineRow({ line, onEdit, onDelete, onTagClick }: Sortable
 
       {/* Budget */}
       <div className="text-right tabular-nums">{formatCurrency(line.scaledBudget)}</div>
+
+      {/* Fit — traffic light dot + fine-tune button */}
+      <div className="flex items-center gap-1.5">
+        <span
+          className={cn(
+            'inline-block h-2.5 w-2.5 shrink-0 rounded-full ring-2',
+            FIT_DOT_COLORS[fitStatus],
+          )}
+          title={FIT_TOOLTIPS[fitStatus]}
+        />
+        <Link
+          href={`/budget/fine-tune?lineId=${line.budgetLine.id}`}
+          title="Fine Tune"
+          className={buttonVariants({
+            variant: 'ghost',
+            size: 'icon',
+            className: 'text-muted-foreground h-7 w-7',
+          })}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+        </Link>
+      </div>
 
       {/* Rollover */}
       <div className="text-muted-foreground text-right tabular-nums">
