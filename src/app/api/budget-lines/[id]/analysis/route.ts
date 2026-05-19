@@ -78,19 +78,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     },
     include: {
       tags: {
-        include: { tag: { select: { id: true, isSource: true } } },
+        include: { tag: { select: { id: true, name: true, color: true, isSource: true } } },
       },
     },
+    orderBy: { date: 'desc' },
   });
 
   // Group transactions by month, summing (debit - credit) for matching non-source tags
   const monthSpendingMap = new Map<string, { spending: number; count: number }>();
+  const relevantTransactions: typeof transactions = [];
 
   for (const tx of transactions) {
     const nonSourceTagIds = tx.tags.filter((tt) => !tt.tag.isSource).map((tt) => tt.tag.id);
 
     if (nonSourceTagIds.length === 0) continue;
     if (!nonSourceTagIds.some((tid) => expandedTagIds.has(tid))) continue;
+
+    relevantTransactions.push(tx);
 
     const monthKey = utcMonthKey(new Date(tx.date));
     const existing = monthSpendingMap.get(monthKey) ?? { spending: 0, count: 0 };
@@ -211,5 +215,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     },
     totalYearlyIncome,
     totalYearlyBudget,
+    transactions: relevantTransactions.map((tx) => ({
+      id: tx.id,
+      date: tx.date.toISOString(),
+      name: tx.name,
+      normalizedName: tx.normalizedName,
+      debit: tx.debit,
+      credit: tx.credit,
+      source: tx.source,
+      notes: tx.notes,
+      archived: tx.archived,
+      tags: tx.tags.map((tt) => tt.tag),
+    })),
   });
 }

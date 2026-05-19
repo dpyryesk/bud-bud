@@ -18,5 +18,8 @@
 [x] Handle bi-weekly periods (there can be two or three per month)
 [x] Update README with screenshots and instructions
 [x] Skip CSV header option
+[x] Add a list of matching transactions to the fine-tuning page
+[x] Add a button to apply suggested amount in the fine-tuning page
+[ ] Handle once a year transactions in the fine-tuning page
 [ ] Simplify REGEX rules to use wildcards
 [ ] Add a changelog

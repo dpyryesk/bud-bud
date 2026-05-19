@@ -20,6 +20,7 @@ import { SpendingHistoryChart } from '@/components/fine-tune/spending-history-ch
 import { StatsCards } from '@/components/fine-tune/stats-cards';
 import { LineConfigPanel } from '@/components/fine-tune/line-config-panel';
 import { SuggestionsPanel } from '@/components/fine-tune/suggestions-panel';
+import { FineTuneTransactionsTable } from '@/components/fine-tune/fine-tune-transactions-table';
 import type { FineTuneAnalysisResponse, FineTuneDraftConfig } from '@/types';
 
 type SimpleLine = {
@@ -258,7 +259,7 @@ export default function FineTunePage() {
   }, [analysis, draft]);
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 p-6 pb-20">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -359,6 +360,7 @@ export default function FineTunePage() {
                 draft={draft}
                 allTags={allTags}
                 amountInput={amountInput}
+                avgPerMonth={analysis.stats.average}
                 onAmountInputChange={handleAmountInputChange}
                 onPeriodChange={handlePeriodChange}
                 onRolloverChange={handleRolloverChange}
@@ -367,6 +369,9 @@ export default function FineTunePage() {
               />
             </div>
           </div>
+
+          {/* Suggestions */}
+          <SuggestionsPanel suggestions={suggestions} />
 
           {/* Statistics */}
           <StatsCards
@@ -378,11 +383,15 @@ export default function FineTunePage() {
             totalYearlyBudget={analysis.totalYearlyBudget}
           />
 
-          {/* Suggestions */}
-          <SuggestionsPanel suggestions={suggestions} />
+          {/* Transactions */}
+          <FineTuneTransactionsTable
+            transactions={analysis.transactions}
+            budgetLineName={analysis.budgetLine.name}
+            budgetStartDate={analysis.activeBudget.startDate}
+          />
 
           {/* Action bar */}
-          <div className="bg-background/80 sticky bottom-0 -mx-6 -mb-6 flex items-center justify-between border-t px-6 py-3 backdrop-blur">
+          <div className="bg-background/80 fixed inset-x-0 bottom-20 z-30 flex items-center justify-between border-t px-6 py-3 backdrop-blur md:bottom-0 md:left-56">
             <div>
               {saveError && <p className="text-destructive text-sm">{saveError}</p>}
               {saveSuccess && (

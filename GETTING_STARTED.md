@@ -456,6 +456,67 @@ is grouped under a named category. Click the row to slide out individual transac
 
 ---
 
+## Step 6.5 — Fine-tune a sample line item
+
+Now that your data is imported and tagged, use the **Fine Tune** page to calibrate one real line against historical behavior.
+
+> **Navigate to** → **Fine Tune** in the sidebar (or click the slider icon in a row on the **Budget** page).
+
+For this walkthrough, use the **Dining & Entertainment** line (`Dining Out` + `Entertainment`) because it usually has variable month-to-month spending and is a good example of how suggestions react.
+
+### 6.5a — Open and select the line
+
+1. Open **Fine Tune**.
+2. In **Budget Line**, select **Dining & Entertainment**.
+3. Wait for the chart and stats to load.
+
+You should see:
+
+- A spending history bar chart by month.
+- A dashed **Budget** reference line (monthly equivalent).
+- A historical **Average** line and variability band.
+- A fit indicator (green / yellow / red / insufficient).
+
+### 6.5b — Read the baseline
+
+Before changing anything, note these cards:
+
+- **Avg/month (historical)**
+- **Std deviation**
+- **Variability**
+- **Projected yearly budget** vs **Expected yearly (history)**
+
+These tell you whether the current budget is already close to real spending.
+
+### 6.5c — Try practical adjustments
+
+Use this sequence to understand how each control behaves:
+
+1. **Amount**: increase/decrease by ~$25–$50 and watch projected yearly + fit update immediately.
+2. **Period**: switch between `monthly`, `biweekly`, and `yearly` and compare the monthly equivalent line on the chart.
+3. **Rollover**: toggle on/off and review suggestion changes (useful for irregular categories).
+4. **Tags**: temporarily remove `Entertainment`, then add it back. This re-runs analysis using only the selected tags so you can see how much each tag contributes.
+
+### 6.5d — Use the fit and suggestions to decide
+
+Interpretation guide:
+
+- **Green fit**: budget is close to historical trend.
+- **Yellow fit**: moderate mismatch; usually worth a small amount or period adjustment.
+- **Red fit**: significant mismatch; likely under- or over-budgeted.
+- **Insufficient**: not enough complete history yet.
+
+Use **Insights & Suggestions** as prompts, not hard rules. A suggestion may be statistically true but still not match your intent (for example, planning extra buffer on purpose).
+
+### 6.5e — Save (or revert)
+
+- Click **Update Budget Line** to persist changes.
+- Click **Cancel** to restore original values.
+
+After saving, return to **Budget** to verify the updated line and fit marker in the table.
+
+---
+
 ## Step 7 — Future steps
 
 ### Adjusting budget lines over time

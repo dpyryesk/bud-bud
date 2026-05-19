@@ -99,6 +99,30 @@ export function StatsCards({
 
   return (
     <div className="space-y-3">
+      {/* Budget fit indicator */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-6">
+            <BudgetFitIndicator status={fitStatus} />
+            <div className="text-sm">
+              <p className="font-medium">Budget fit</p>
+              <p className="text-muted-foreground mt-0.5">
+                Projected{' '}
+                <span className="font-medium text-green-600">
+                  {formatCurrency(projectedYearly)}/yr
+                </span>{' '}
+                vs expected{' '}
+                <span className="font-medium text-blue-600">
+                  {expectedYearly > 0 ? formatCurrency(expectedYearly) : '—'}/yr
+                </span>
+                {expectedYearly > 0 &&
+                  ` (${projectedYearly > expectedYearly ? '+' : ''}${(((projectedYearly - expectedYearly) / expectedYearly) * 100).toFixed(1)}%)`}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Row 1: Historical stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard
@@ -180,30 +204,6 @@ export function StatsCards({
           sub={`of ${formatCurrency(totalYearlyBudget + projectedYearly)}/yr total`}
         />
       </div>
-
-      {/* Budget fit indicator */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-6">
-            <BudgetFitIndicator status={fitStatus} />
-            <div className="text-sm">
-              <p className="font-medium">Budget fit</p>
-              <p className="text-muted-foreground mt-0.5">
-                Projected{' '}
-                <span className="font-medium text-green-600">
-                  {formatCurrency(projectedYearly)}/yr
-                </span>{' '}
-                vs expected{' '}
-                <span className="font-medium text-blue-600">
-                  {expectedYearly > 0 ? formatCurrency(expectedYearly) : '—'}/yr
-                </span>
-                {expectedYearly > 0 &&
-                  ` (${projectedYearly > expectedYearly ? '+' : ''}${(((projectedYearly - expectedYearly) / expectedYearly) * 100).toFixed(1)}%)`}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

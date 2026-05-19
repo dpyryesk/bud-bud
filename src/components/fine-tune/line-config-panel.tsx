@@ -2,6 +2,7 @@
 
 import { X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -30,6 +31,7 @@ interface LineConfigPanelProps {
   draft: FineTuneDraftConfig;
   allTags: TagWithLevel<TagOption>[];
   amountInput: string;
+  avgPerMonth?: number;
   onAmountInputChange: (raw: string) => void;
   onPeriodChange: (period: BudgetPeriodType) => void;
   onRolloverChange: (rollover: boolean) => void;
@@ -41,6 +43,7 @@ export function LineConfigPanel({
   draft,
   allTags,
   amountInput,
+  avgPerMonth,
   onAmountInputChange,
   onPeriodChange,
   onRolloverChange,
@@ -52,6 +55,21 @@ export function LineConfigPanel({
   const selectedTagObjects = draft.tagIds
     .map((id) => allTags.find((t) => t.id === id))
     .filter(Boolean) as TagWithLevel<TagOption>[];
+
+  const handleSuggestedClick = () => {
+    if (avgPerMonth == null) return;
+    const yearlyAvg = avgPerMonth * 12;
+    let suggested: number;
+    if (draft.period === 'monthly') {
+      suggested = Math.round(avgPerMonth);
+    } else if (draft.period === 'biweekly') {
+      suggested = Math.round(yearlyAvg / 26);
+    } else {
+      // yearly
+      suggested = Math.round(yearlyAvg);
+    }
+    onAmountInputChange(String(suggested));
+  };
 
   const handleTagSelect = (tagId: string) => {
     if (tagId && !draft.tagIds.includes(tagId)) {
@@ -69,15 +87,29 @@ export function LineConfigPanel({
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Amount ($)</Label>
-            <Input
-              type="number"
-              step="1"
-              min="0"
-              value={amountInput}
-              onChange={(e) => onAmountInputChange(e.target.value)}
-              placeholder="0.00"
-              className="h-8 text-sm"
-            />
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="number"
+                step="1"
+                min="0"
+                value={amountInput}
+                onChange={(e) => onAmountInputChange(e.target.value)}
+                placeholder="0.00"
+                className="h-8 min-w-0 flex-1 text-sm"
+              />
+              {avgPerMonth != null && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 px-2 text-xs"
+                  onClick={handleSuggestedClick}
+                  title={`Set to historical monthly average (~$${Math.round(avgPerMonth)}) scaled to ${draft.period}`}
+                >
+                  Suggested
+                </Button>
+              )}
+            </div>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Period</Label>

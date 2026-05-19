@@ -217,6 +217,7 @@ export type FineTuneAnalysisResponse = {
   stats: FineTuneStats;
   totalYearlyIncome: number;
   totalYearlyBudget: number; // all OTHER lines annualized
+  transactions: TransactionWithTags[];
 };
 
 export type FineTuneDraftConfig = {
