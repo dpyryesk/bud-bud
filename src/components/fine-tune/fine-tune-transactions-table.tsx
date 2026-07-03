@@ -16,18 +16,18 @@ import type { TransactionWithTags } from '@/types';
 interface FineTuneTransactionsTableProps {
   transactions: TransactionWithTags[];
   budgetLineName: string;
-  budgetStartDate: string;
+  analysisStartDate: string;
 }
 
 export function FineTuneTransactionsTable({
   transactions,
   budgetLineName,
-  budgetStartDate,
+  analysisStartDate,
 }: FineTuneTransactionsTableProps) {
   const totalDebit = transactions.reduce((s, tx) => s + tx.debit, 0);
   const totalCredit = transactions.reduce((s, tx) => s + tx.credit, 0);
 
-  const formattedStart = new Date(budgetStartDate).toLocaleDateString('en-CA', {
+  const formattedStart = new Date(analysisStartDate).toLocaleDateString('en-CA', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

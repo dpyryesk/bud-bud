@@ -480,3 +480,29 @@ export function countBiWeeklyPeriodsInMonth(anchorDate: Date, year: number, mont
 export function isThirdPaycheckMonth(anchorDate: Date, year: number, month: number): boolean {
   return countBiWeeklyPeriodsInMonth(anchorDate, year, month) === 3;
 }
+
+/**
+ * Build an ordered list of `"YYYY-MM"` strings from `start` up to and
+ * including the month identified by `lastCompleteYear`/`lastCompleteMonth`
+ * (both UTC, month 0-indexed).
+ *
+ * All arithmetic is done in UTC to avoid local-timezone drift.
+ */
+export function buildMonthList(
+  start: Date,
+  lastCompleteYear: number,
+  lastCompleteMonth: number,
+): string[] {
+  const months: string[] = [];
+  let y = start.getUTCFullYear();
+  let m = start.getUTCMonth(); // 0-indexed
+  while (y < lastCompleteYear || (y === lastCompleteYear && m <= lastCompleteMonth)) {
+    months.push(`${y}-${String(m + 1).padStart(2, '0')}`);
+    m += 1;
+    if (m === 12) {
+      m = 0;
+      y += 1;
+    }
+  }
+  return months;
+}

@@ -142,7 +142,7 @@ export function StatsCards({
           valueClass={varLabelColor[varLevel]}
         />
         <StatCard
-          label="Total since budget start"
+          label="Total in history"
           value={formatCurrency(totalSpending)}
           sub={`${nonZeroMonthCount}/${monthCount} months with spend`}
         />

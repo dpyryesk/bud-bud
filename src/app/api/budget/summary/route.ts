@@ -4,6 +4,7 @@ import {
   scaleBudgetAmount,
   getCompletePeriodsBetween,
   getYearlyAmount,
+  buildMonthList,
   type BudgetPeriodType,
 } from '@/lib/date-utils';
 import type { Budget } from '@/generated/prisma/client';
@@ -179,8 +180,9 @@ export async function GET(request: NextRequest) {
     rolloverHistoryStart < viewPeriod.start ? rolloverHistoryStart : viewPeriod.start;
 
   // --- Fit data date range ---
-  // Fit is always computed from budget start to the last fully complete month,
-  // regardless of the selected view period. This mirrors the analysis endpoint logic.
+  // Fit is always computed from the earliest imported transaction to the last fully
+  // complete month, regardless of the selected view period. This mirrors the
+  // fine-tune analysis endpoint so copied/new budgets keep previous-budget history.
   const today = new Date();
   let fitLastMonth = today.getUTCMonth() - 1; // 0-indexed
   let fitLastYear = today.getUTCFullYear();
@@ -190,20 +192,16 @@ export async function GET(request: NextRequest) {
   }
   // End of the last complete month (UTC end-of-day)
   const fitPeriodEnd = new Date(Date.UTC(fitLastYear, fitLastMonth + 1, 0, 23, 59, 59, 999));
-  const fitPeriodStart = new Date(applicableBudget.startDate);
+
+  const earliestTransaction = await prisma.transaction.findFirst({
+    where: { archived: false },
+    orderBy: { date: 'asc' },
+    select: { date: true },
+  });
+  const fitPeriodStart = earliestTransaction?.date ?? applicableBudget.startDate;
 
   // Build the list of complete months for fit calculation
-  const fitMonthList: string[] = [];
-  let mYear = fitPeriodStart.getUTCFullYear();
-  let mMonth = fitPeriodStart.getUTCMonth(); // 0-indexed
-  while (mYear < fitLastYear || (mYear === fitLastYear && mMonth <= fitLastMonth)) {
-    fitMonthList.push(`${mYear}-${String(mMonth + 1).padStart(2, '0')}`);
-    mMonth += 1;
-    if (mMonth === 12) {
-      mMonth = 0;
-      mYear += 1;
-    }
-  }
+  const fitMonthList = buildMonthList(new Date(fitPeriodStart), fitLastYear, fitLastMonth);
   const fitMonthCount = fitMonthList.length;
 
   // Load ALL transactions we'll ever need in one query (exclude archived)
@@ -224,7 +222,7 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  // Load fit-period transactions separately if needed (budget start → last complete month).
+  // Load fit-period transactions separately if needed (first transaction → last complete month).
   // This covers cases where the view period doesn't overlap with the full fit range.
   const fitTransactions =
     fitMonthCount > 0 && fitPeriodStart <= fitPeriodEnd

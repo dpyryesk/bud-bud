@@ -17,7 +17,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'startDate is not a valid date' }, { status: 400 });
   }
 
-  // Fetch source budget with all categories, lines, and line tags
+  // Fetch source budget with all categories, lines, line tags, and income sources
   const source = await prisma.budget.findUnique({
     where: { id },
     include: {
@@ -29,6 +29,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         include: {
           tags: true,
         },
+      },
+      incomeSources: {
+        orderBy: { order: 'asc' },
       },
     },
   });
@@ -99,6 +102,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             },
           });
         }
+      }
+
+      // 5. Create income sources for the new budget
+      for (const incomeSource of source.incomeSources) {
+        await tx.incomeSource.create({
+          data: {
+            budgetId: budget.id,
+            name: incomeSource.name,
+            netAmount: incomeSource.netAmount,
+            netPeriod: incomeSource.netPeriod,
+            grossAmount: incomeSource.grossAmount,
+            grossPeriod: incomeSource.grossPeriod,
+            order: incomeSource.order,
+          },
+        });
       }
 
       return budget;

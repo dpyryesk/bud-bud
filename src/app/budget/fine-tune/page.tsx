@@ -68,6 +68,16 @@ export default function FineTunePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const selectedLineName = useMemo(() => {
+    if (!selectedLineId) return 'Select a budget line…';
+    return (
+      allLines.find((line) => line.id === selectedLineId)?.name ??
+      (analysis?.budgetLine.id === selectedLineId
+        ? analysis.budgetLine.name
+        : 'Loading budget line…')
+    );
+  }, [allLines, analysis, selectedLineId]);
+
   // Fetch all budget lines on mount
   useEffect(() => {
     const fetchLines = async () => {
@@ -288,13 +298,7 @@ export default function FineTunePage() {
           }}
         >
           <SelectTrigger className="w-72">
-            <SelectValue>
-              {(value: string | null) =>
-                !value
-                  ? 'Select a budget line…'
-                  : (allLines.find((l) => l.id === value)?.name ?? 'Unknown line')
-              }
-            </SelectValue>
+            <SelectValue>{() => selectedLineName}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {allLines.map((line) => (
@@ -336,8 +340,8 @@ export default function FineTunePage() {
                         Spending History — {analysis.budgetLine.name}
                       </h2>
                       <p className="text-muted-foreground text-xs">
-                        Since budget start:{' '}
-                        {new Date(analysis.activeBudget.startDate).toLocaleDateString('en-CA', {
+                        Since first transaction:{' '}
+                        {new Date(analysis.analysisStartDate).toLocaleDateString('en-CA', {
                           year: 'numeric',
                           month: 'short',
                           day: 'numeric',
@@ -387,7 +391,7 @@ export default function FineTunePage() {
           <FineTuneTransactionsTable
             transactions={analysis.transactions}
             budgetLineName={analysis.budgetLine.name}
-            budgetStartDate={analysis.activeBudget.startDate}
+            analysisStartDate={analysis.analysisStartDate}
           />
 
           {/* Action bar */}

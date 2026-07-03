@@ -213,6 +213,7 @@ export type FineTuneStats = {
 export type FineTuneAnalysisResponse = {
   budgetLine: BudgetLineWithTags;
   activeBudget: { id: string; startDate: string };
+  analysisStartDate: string;
   monthlyData: FineTuneMonthlyDataPoint[];
   stats: FineTuneStats;
   totalYearlyIncome: number;

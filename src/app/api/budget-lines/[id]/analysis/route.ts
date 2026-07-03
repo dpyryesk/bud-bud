@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { collectDescendantTagIds } from '@/lib/tag-tree';
-import { getYearlyAmount } from '@/lib/date-utils';
+import { getYearlyAmount, buildMonthList } from '@/lib/date-utils';
 import type { BudgetPeriodType } from '@/lib/date-utils';
 
 /** Build a yyyy-MM key from a Date using UTC fields to avoid local-timezone drift. */
@@ -41,6 +41,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const today = new Date();
   const budgetStart = budget.startDate;
 
+  // Fine-tuning should consider the full imported transaction history for these tags,
+  // not only transactions that happened after the selected line's budget took effect.
+  // This keeps historical spending available after creating/copying a new budget.
+  const earliestTransaction = await prisma.transaction.findFirst({
+    where: { archived: false },
+    orderBy: { date: 'asc' },
+    select: { date: true },
+  });
+  const analysisStart = earliestTransaction?.date ?? budgetStart;
+
   // Build children map for descendant expansion
   const allTags = await prisma.tag.findMany({ select: { id: true, parentId: true } });
   const childrenMap = new Map<string, string[]>();
@@ -66,14 +76,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
   const expandedTagIds = collectDescendantTagIds(directTagIds, childrenMap);
 
-  // Load non-archived transactions from budget start to today
+  // Load non-archived transactions from the earliest transaction to today
   const endOfToday = new Date(
     Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 23, 59, 59, 999),
   );
 
   const transactions = await prisma.transaction.findMany({
     where: {
-      date: { gte: budgetStart, lte: endOfToday },
+      date: { gte: analysisStart, lte: endOfToday },
       archived: false,
     },
     include: {
@@ -105,14 +115,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     });
   }
 
-  // Build complete month list from budget start up to (but NOT including) the current month.
+  // Build complete month list from the earliest transaction up to (but NOT including) the current month.
   // The current month is always partial, so including it would skew statistics.
   // All arithmetic is done in UTC to avoid local-timezone drift.
-  const monthlyData: { month: string; spending: number; transactionCount: number }[] = [];
-  const budgetStartUTC = new Date(budgetStart);
-  let cursorYear = budgetStartUTC.getUTCFullYear();
-  let cursorMonth = budgetStartUTC.getUTCMonth(); // 0-indexed
-
   // Last complete month = month before today (handles January → December roll-back)
   let lastCompleteYear = today.getUTCFullYear();
   let lastCompleteMonth = today.getUTCMonth() - 1; // 0-indexed
@@ -121,23 +126,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     lastCompleteYear -= 1;
   }
 
-  while (
-    cursorYear < lastCompleteYear ||
-    (cursorYear === lastCompleteYear && cursorMonth <= lastCompleteMonth)
-  ) {
-    const key = `${cursorYear}-${String(cursorMonth + 1).padStart(2, '0')}`;
+  const monthList = buildMonthList(new Date(analysisStart), lastCompleteYear, lastCompleteMonth);
+  const monthlyData = monthList.map((key) => {
     const entry = monthSpendingMap.get(key);
-    monthlyData.push({
+    return {
       month: key,
       spending: entry ? Math.max(0, entry.spending) : 0,
       transactionCount: entry?.count ?? 0,
-    });
-    cursorMonth += 1;
-    if (cursorMonth === 12) {
-      cursorMonth = 0;
-      cursorYear += 1;
-    }
-  }
+    };
+  });
 
   // Calculate statistics
   const spendingValues = monthlyData.map((m) => m.spending);
@@ -200,6 +197,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       id: budget.id,
       startDate: budget.startDate.toISOString(),
     },
+    analysisStartDate: analysisStart.toISOString(),
     monthlyData,
     stats: {
       average,
