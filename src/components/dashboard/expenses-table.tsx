@@ -5,12 +5,17 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatCurrency, getYearlyAmount } from '@/lib/date-utils';
+import { cn } from '@/lib/utils';
 import type { BudgetSummaryLine, BudgetCategory } from '@/types';
 
 interface ExpensesTableProps {
   summaryLines: BudgetSummaryLine[];
   orderedCategories: BudgetCategory[];
   totalYearlyNetIncome: number;
+  /** Period-specific summary lines (scaledBudget / actualSpending / remaining for selected period). */
+  periodSummaryLines?: BudgetSummaryLine[];
+  /** Human-readable label for the selected period, e.g. "June 2026". */
+  periodLabel?: string;
 }
 
 const PERIOD_LABEL: Record<string, string> = {
@@ -26,13 +31,19 @@ function pct(value: number, total: number): string {
   return `${((value / total) * 100).toFixed(1)}%`;
 }
 
+// ---------------------------------------------------------------------------
+// LineRow
+// ---------------------------------------------------------------------------
+
 interface LineRowProps {
   line: BudgetSummaryLine;
   totalYearlyBudget: number;
   totalYearlyNetIncome: number;
+  /** Matching entry from periodSummaryLines keyed by budgetLine.id, if available. */
+  periodLine?: BudgetSummaryLine;
 }
 
-function LineRow({ line, totalYearlyBudget, totalYearlyNetIncome }: LineRowProps) {
+function LineRow({ line, totalYearlyBudget, totalYearlyNetIncome, periodLine }: LineRowProps) {
   const { budgetLine } = line;
   const yearlyAmount = getYearlyAmount(budgetLine.amount, budgetLine.period);
 
@@ -45,26 +56,56 @@ function LineRow({ line, totalYearlyBudget, totalYearlyNetIncome }: LineRowProps
       <td className="py-1.5 pr-4 text-right tabular-nums">
         {pct(yearlyAmount, totalYearlyBudget)}
       </td>
-      <td className="py-1.5 text-right tabular-nums">{pct(yearlyAmount, totalYearlyNetIncome)}</td>
+      <td className={cn('py-1.5 text-right tabular-nums', periodLine !== undefined && 'pr-4')}>
+        {pct(yearlyAmount, totalYearlyNetIncome)}
+      </td>
+      {periodLine !== undefined && (
+        <>
+          <td className="py-1.5 pr-4 text-right tabular-nums">
+            {formatCurrency(periodLine.scaledBudget)}
+          </td>
+          <td className="py-1.5 pr-4 text-right tabular-nums">
+            {formatCurrency(periodLine.actualSpending)}
+          </td>
+          <td
+            className={cn(
+              'py-1.5 text-right tabular-nums',
+              periodLine.remaining < 0 ? 'text-destructive' : 'text-primary',
+            )}
+          >
+            {formatCurrency(periodLine.remaining)}
+          </td>
+        </>
+      )}
     </tr>
   );
 }
+
+// ---------------------------------------------------------------------------
+// CategorySubtotals (expanded view)
+// ---------------------------------------------------------------------------
 
 interface CategorySubtotalsProps {
   lines: BudgetSummaryLine[];
   totalYearlyBudget: number;
   totalYearlyNetIncome: number;
+  periodLines?: BudgetSummaryLine[];
 }
 
 function CategorySubtotals({
   lines,
   totalYearlyBudget,
   totalYearlyNetIncome,
+  periodLines,
 }: CategorySubtotalsProps) {
   const yearlyTotal = lines.reduce(
     (sum, l) => sum + getYearlyAmount(l.budgetLine.amount, l.budgetLine.period),
     0,
   );
+  const pBudget = periodLines?.reduce((s, l) => s + l.scaledBudget, 0);
+  const pActual = periodLines?.reduce((s, l) => s + l.actualSpending, 0);
+  const pRemaining = periodLines?.reduce((s, l) => s + l.remaining, 0);
+
   return (
     <tr className="bg-muted/20 text-sm font-medium">
       <td className="text-muted-foreground py-1.5 pr-4 pl-6 italic">Subtotal</td>
@@ -74,30 +115,46 @@ function CategorySubtotals({
       <td className="py-1.5 pr-4" />
       <td className="py-1.5 pr-4 text-right tabular-nums">{formatCurrency(yearlyTotal)}</td>
       <td className="py-1.5 pr-4 text-right tabular-nums">{pct(yearlyTotal, totalYearlyBudget)}</td>
-      <td className="py-1.5 text-right tabular-nums">{pct(yearlyTotal, totalYearlyNetIncome)}</td>
+      <td className={cn('py-1.5 text-right tabular-nums', periodLines !== undefined && 'pr-4')}>
+        {pct(yearlyTotal, totalYearlyNetIncome)}
+      </td>
+      {periodLines !== undefined && (
+        <>
+          <td className="py-1.5 pr-4 text-right tabular-nums">{formatCurrency(pBudget ?? 0)}</td>
+          <td className="py-1.5 pr-4 text-right tabular-nums">{formatCurrency(pActual ?? 0)}</td>
+          <td
+            className={cn(
+              'py-1.5 text-right tabular-nums',
+              (pRemaining ?? 0) < 0 ? 'text-destructive' : 'text-primary',
+            )}
+          >
+            {formatCurrency(pRemaining ?? 0)}
+          </td>
+        </>
+      )}
     </tr>
   );
 }
 
-function CollapseChevron({ collapsed }: { collapsed: boolean }) {
-  return collapsed ? (
-    <ChevronRight className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
-  ) : (
-    <ChevronDown className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
-  );
-}
+// ---------------------------------------------------------------------------
+// InlineSubtotals (collapsed category header row)
+// ---------------------------------------------------------------------------
 
-/** Inline subtotal cells shown in the header row when a category is collapsed (5 cells). */
 function InlineSubtotals({
   lines,
   totalYearlyBudget,
   totalYearlyNetIncome,
+  periodLines,
 }: CategorySubtotalsProps) {
   const scaledTotal = lines.reduce((s, l) => s + l.scaledBudget, 0);
   const yearlyTotal = lines.reduce(
     (s, l) => s + getYearlyAmount(l.budgetLine.amount, l.budgetLine.period),
     0,
   );
+  const pBudget = periodLines?.reduce((s, l) => s + l.scaledBudget, 0);
+  const pActual = periodLines?.reduce((s, l) => s + l.actualSpending, 0);
+  const pRemaining = periodLines?.reduce((s, l) => s + l.remaining, 0);
+
   return (
     <>
       <td className="text-muted-foreground py-1.5 pr-2 text-right text-xs tabular-nums">
@@ -110,18 +167,69 @@ function InlineSubtotals({
       <td className="text-muted-foreground py-1.5 pr-4 text-right text-xs tabular-nums">
         {pct(yearlyTotal, totalYearlyBudget)}
       </td>
-      <td className="text-muted-foreground py-1.5 text-right text-xs tabular-nums">
+      <td
+        className={cn(
+          'text-muted-foreground py-1.5 text-right text-xs tabular-nums',
+          periodLines !== undefined && 'pr-4',
+        )}
+      >
         {pct(yearlyTotal, totalYearlyNetIncome)}
       </td>
+      {periodLines !== undefined && (
+        <>
+          <td className="text-muted-foreground py-1.5 pr-4 text-right text-xs tabular-nums">
+            {formatCurrency(pBudget ?? 0)}
+          </td>
+          <td className="text-muted-foreground py-1.5 pr-4 text-right text-xs tabular-nums">
+            {formatCurrency(pActual ?? 0)}
+          </td>
+          <td
+            className={cn(
+              'py-1.5 text-right text-xs tabular-nums',
+              (pRemaining ?? 0) < 0 ? 'text-destructive' : 'text-primary',
+            )}
+          >
+            {formatCurrency(pRemaining ?? 0)}
+          </td>
+        </>
+      )}
     </>
   );
 }
+
+// ---------------------------------------------------------------------------
+// CollapseChevron helper
+// ---------------------------------------------------------------------------
+
+function CollapseChevron({ collapsed }: { collapsed: boolean }) {
+  return collapsed ? (
+    <ChevronRight className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+  ) : (
+    <ChevronDown className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ExpensesTable
+// ---------------------------------------------------------------------------
 
 export function ExpensesTable({
   summaryLines,
   orderedCategories,
   totalYearlyNetIncome,
+  periodSummaryLines,
+  periodLabel,
 }: ExpensesTableProps) {
+  const hasPeriod = periodSummaryLines !== undefined && periodSummaryLines.length > 0;
+
+  // Map budget line id → period summary line for O(1) lookups
+  const periodLineMap = new Map<string, BudgetSummaryLine>();
+  if (hasPeriod) {
+    for (const pl of periodSummaryLines!) {
+      periodLineMap.set(pl.budgetLine.id, pl);
+    }
+  }
+
   const totalYearlyBudget = summaryLines.reduce(
     (sum, l) => sum + getYearlyAmount(l.budgetLine.amount, l.budgetLine.period),
     0,
@@ -158,6 +266,20 @@ export function ExpensesTable({
 
   const collapseAll = () => setCollapsedIds(new Set(allKeys));
   const expandAll = () => setCollapsedIds(new Set());
+
+  // Number of "trailing" cols after Name: 5 yearly cols + 3 period cols (optional)
+  const trailingColSpan = hasPeriod ? 8 : 5;
+
+  // Period totals across all lines
+  const periodTotalBudget = hasPeriod
+    ? (periodSummaryLines?.reduce((s, l) => s + l.scaledBudget, 0) ?? 0)
+    : 0;
+  const periodTotalActual = hasPeriod
+    ? (periodSummaryLines?.reduce((s, l) => s + l.actualSpending, 0) ?? 0)
+    : 0;
+  const periodTotalRemaining = hasPeriod
+    ? (periodSummaryLines?.reduce((s, l) => s + l.remaining, 0) ?? 0)
+    : 0;
 
   return (
     <Card>
@@ -201,9 +323,27 @@ export function ExpensesTable({
                   <th className="text-muted-foreground pr-4 pb-2 text-right text-xs font-semibold tracking-wide uppercase">
                     % of Budget
                   </th>
-                  <th className="text-muted-foreground pb-2 text-right text-xs font-semibold tracking-wide uppercase">
+                  <th
+                    className={cn(
+                      'text-muted-foreground pb-2 text-right text-xs font-semibold tracking-wide uppercase',
+                      hasPeriod && 'pr-4',
+                    )}
+                  >
                     % of Income
                   </th>
+                  {hasPeriod && (
+                    <>
+                      <th className="text-muted-foreground border-l pr-4 pb-2 pl-4 text-right text-xs font-semibold tracking-wide uppercase">
+                        {periodLabel ?? 'Period'} Budget
+                      </th>
+                      <th className="text-muted-foreground pr-4 pb-2 text-right text-xs font-semibold tracking-wide uppercase">
+                        {periodLabel ?? 'Period'} Actual
+                      </th>
+                      <th className="text-muted-foreground pb-2 text-right text-xs font-semibold tracking-wide uppercase">
+                        {periodLabel ?? 'Period'} Remaining
+                      </th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -211,10 +351,17 @@ export function ExpensesTable({
                   const lines = groupedLines[cat.id] ?? [];
                   if (lines.length === 0) return null;
                   const collapsed = collapsedIds.has(cat.id);
+
+                  // Period lines for this category
+                  const periodCatLines = hasPeriod
+                    ? (lines
+                        .map((l) => periodLineMap.get(l.budgetLine.id))
+                        .filter(Boolean) as BudgetSummaryLine[])
+                    : undefined;
+
                   return (
                     <Fragment key={cat.id}>
-                      {/* Category header row — name cell is always 1 col; remaining 5 cols show
-                          inline subtotals when collapsed or a transparent spacer when expanded */}
+                      {/* Category header row */}
                       <tr
                         className="bg-muted/30 hover:bg-muted/50 cursor-pointer select-none"
                         onClick={() => toggleCollapse(cat.id)}
@@ -231,13 +378,14 @@ export function ExpensesTable({
                             lines={lines}
                             totalYearlyBudget={totalYearlyBudget}
                             totalYearlyNetIncome={totalYearlyNetIncome}
+                            periodLines={periodCatLines}
                           />
                         ) : (
-                          <td colSpan={5} />
+                          <td colSpan={trailingColSpan} />
                         )}
                       </tr>
 
-                      {/* Individual line rows — hidden when collapsed */}
+                      {/* Individual line rows */}
                       {!collapsed &&
                         lines.map((line) => (
                           <LineRow
@@ -245,15 +393,17 @@ export function ExpensesTable({
                             line={line}
                             totalYearlyBudget={totalYearlyBudget}
                             totalYearlyNetIncome={totalYearlyNetIncome}
+                            periodLine={periodLineMap.get(line.budgetLine.id)}
                           />
                         ))}
 
-                      {/* Subtotals row — shown only when expanded */}
+                      {/* Subtotals row */}
                       {!collapsed && (
                         <CategorySubtotals
                           lines={lines}
                           totalYearlyBudget={totalYearlyBudget}
                           totalYearlyNetIncome={totalYearlyNetIncome}
+                          periodLines={periodCatLines}
                         />
                       )}
                     </Fragment>
@@ -264,6 +414,12 @@ export function ExpensesTable({
                 {uncategorizedLines.length > 0 &&
                   (() => {
                     const collapsed = collapsedIds.has(UNCATEGORIZED_KEY);
+                    const periodUncatLines = hasPeriod
+                      ? (uncategorizedLines
+                          .map((l) => periodLineMap.get(l.budgetLine.id))
+                          .filter(Boolean) as BudgetSummaryLine[])
+                      : undefined;
+
                     return (
                       <Fragment key={UNCATEGORIZED_KEY}>
                         <tr
@@ -282,9 +438,10 @@ export function ExpensesTable({
                               lines={uncategorizedLines}
                               totalYearlyBudget={totalYearlyBudget}
                               totalYearlyNetIncome={totalYearlyNetIncome}
+                              periodLines={periodUncatLines}
                             />
                           ) : (
-                            <td colSpan={5} />
+                            <td colSpan={trailingColSpan} />
                           )}
                         </tr>
                         {!collapsed &&
@@ -294,6 +451,7 @@ export function ExpensesTable({
                               line={line}
                               totalYearlyBudget={totalYearlyBudget}
                               totalYearlyNetIncome={totalYearlyNetIncome}
+                              periodLine={periodLineMap.get(line.budgetLine.id)}
                             />
                           ))}
                         {!collapsed && (
@@ -301,6 +459,7 @@ export function ExpensesTable({
                             lines={uncategorizedLines}
                             totalYearlyBudget={totalYearlyBudget}
                             totalYearlyNetIncome={totalYearlyNetIncome}
+                            periodLines={periodUncatLines}
                           />
                         )}
                       </Fragment>
@@ -318,9 +477,27 @@ export function ExpensesTable({
                     {formatCurrency(totalYearlyBudget)}
                   </td>
                   <td className="py-2 pr-4 text-right tabular-nums">100%</td>
-                  <td className="py-2 text-right tabular-nums">
+                  <td className={cn('py-2 text-right tabular-nums', hasPeriod && 'pr-4')}>
                     {pct(totalYearlyBudget, totalYearlyNetIncome)}
                   </td>
+                  {hasPeriod && (
+                    <>
+                      <td className="border-l py-2 pr-4 pl-4 text-right tabular-nums">
+                        {formatCurrency(periodTotalBudget)}
+                      </td>
+                      <td className="py-2 pr-4 text-right tabular-nums">
+                        {formatCurrency(periodTotalActual)}
+                      </td>
+                      <td
+                        className={cn(
+                          'py-2 text-right tabular-nums',
+                          periodTotalRemaining < 0 ? 'text-destructive' : 'text-primary',
+                        )}
+                      >
+                        {formatCurrency(periodTotalRemaining)}
+                      </td>
+                    </>
+                  )}
                 </tr>
               </tbody>
             </table>

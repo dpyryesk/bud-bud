@@ -108,6 +108,7 @@ export default function DashboardPage() {
   const [yearTotalUntracked, setYearTotalUntracked] = useState(0);
 
   // Period-specific summary
+  const [periodActiveBudget, setPeriodActiveBudget] = useState<Budget | null>(null);
   const [periodSummaryLines, setPeriodSummaryLines] = useState<BudgetSummaryLine[]>([]);
   const [periodTotalIncome, setPeriodTotalIncome] = useState(0);
   const [periodTotalDebits, setPeriodTotalDebits] = useState(0);
@@ -123,6 +124,7 @@ export default function DashboardPage() {
 
   // ---- Derived values ----
 
+  // Categories ordered for the year-at-a-glance charts (uses yearly lines)
   const orderedCategories: BudgetCategory[] = [];
   const seenCatIds = new Set<string>();
   for (const line of yearSummaryLines) {
@@ -132,6 +134,17 @@ export default function DashboardPage() {
     }
   }
   orderedCategories.sort((a, b) => a.order - b.order);
+
+  // Categories ordered for the Budget Expenses table (uses period lines — correct budget)
+  const periodOrderedCategories: BudgetCategory[] = [];
+  const seenPeriodCatIds = new Set<string>();
+  for (const line of periodSummaryLines) {
+    if (line.budgetLine.category && !seenPeriodCatIds.has(line.budgetLine.category.id)) {
+      periodOrderedCategories.push(line.budgetLine.category);
+      seenPeriodCatIds.add(line.budgetLine.category.id);
+    }
+  }
+  periodOrderedCategories.sort((a, b) => a.order - b.order);
 
   const totalYearlyNetIncome = incomeSources.reduce(
     (sum, src) => sum + getYearlyAmount(src.netAmount, src.netPeriod),
@@ -199,16 +212,19 @@ export default function DashboardPage() {
       });
       const res = await fetch(`/api/budget/summary?${params}`);
       if (!res.ok) {
+        setPeriodActiveBudget(null);
         setPeriodSummaryLines([]);
         setPeriodTotalIncome(0);
         setPeriodTotalDebits(0);
         return;
       }
       const data = (await res.json()) as BudgetSummaryResponse;
+      setPeriodActiveBudget(data.activeBudget);
       setPeriodSummaryLines(data.lines ?? []);
       setPeriodTotalIncome(data.totalIncome ?? 0);
       setPeriodTotalDebits(data.totalDebits ?? 0);
     } catch {
+      setPeriodActiveBudget(null);
       setPeriodSummaryLines([]);
       setPeriodTotalIncome(0);
       setPeriodTotalDebits(0);
@@ -310,14 +326,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const id = setTimeout(() => {
-      if (!activeBudget) {
+      // Use the budget applicable to the selected period, not the yearly budget,
+      // so the income sources always match the currently selected date.
+      const budgetForPeriod = periodActiveBudget ?? activeBudget;
+      if (!budgetForPeriod) {
         setIncomeSources([]);
         return;
       }
-      void fetchIncomeSources(activeBudget.id);
+      void fetchIncomeSources(budgetForPeriod.id);
     }, 0);
     return () => clearTimeout(id);
-  }, [activeBudget, fetchIncomeSources]);
+  }, [periodActiveBudget, activeBudget, fetchIncomeSources]);
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -429,11 +448,13 @@ export default function DashboardPage() {
           {/* 3. Expected Income */}
           <IncomeSourcesCard incomeSources={incomeSources} />
 
-          {/* 4. Table of Expenses */}
+          {/* 4. Table of Expenses — driven by period lines so the correct budget is always shown */}
           <ExpensesTable
-            summaryLines={yearSummaryLines}
-            orderedCategories={orderedCategories}
+            summaryLines={periodSummaryLines}
+            orderedCategories={periodOrderedCategories}
             totalYearlyNetIncome={totalYearlyNetIncome}
+            periodSummaryLines={periodSummaryLines}
+            periodLabel={period.label}
           />
         </>
       )}

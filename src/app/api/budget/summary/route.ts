@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import {
-  scaleBudgetAmount,
+  type BudgetPeriodType,
+  buildMonthList,
   getCompletePeriodsBetween,
   getYearlyAmount,
-  buildMonthList,
-  type BudgetPeriodType,
+  scaleBudgetAmount,
 } from '@/lib/date-utils';
 import type { Budget } from '@/generated/prisma/client';
 import { collectDescendantTagIds } from '@/lib/tag-tree';
@@ -179,6 +179,39 @@ export async function GET(request: NextRequest) {
   const effectiveStart =
     rolloverHistoryStart < viewPeriod.start ? rolloverHistoryStart : viewPeriod.start;
 
+  // When resetRollover is false, earlier periods may fall under previous budgets that had
+  // different per-line amounts. Load those budgets' lines so the rollover loop can use the
+  // historically-correct budget amount for each period instead of always using the current
+  // budget line's amount.
+  const hasPreviousChainBudgets = needsHistory && rolloverHistoryStart < applicableBudget.startDate;
+  const historicalChainLines = hasPreviousChainBudgets
+    ? await prisma.budgetLine.findMany({
+        where: {
+          budgetId: {
+            in: allBudgets
+              .filter((b) => b.startDate >= rolloverHistoryStart && b.id !== applicableBudget.id)
+              .map((b) => b.id),
+          },
+        },
+        include: { tags: { include: { tag: { select: { id: true } } } } },
+      })
+    : [];
+
+  // Build a lookup: budgetId → list of { amount, period, directTagIds }
+  const historicalLinesByBudgetId = new Map<
+    string,
+    Array<{ amount: number; period: string; directTagIds: string[] }>
+  >();
+  for (const hbl of historicalChainLines) {
+    const existing = historicalLinesByBudgetId.get(hbl.budgetId) ?? [];
+    existing.push({
+      amount: hbl.amount,
+      period: hbl.period,
+      directTagIds: hbl.tags.map((t) => t.tag.id),
+    });
+    historicalLinesByBudgetId.set(hbl.budgetId, existing);
+  }
+
   // --- Fit data date range ---
   // Fit is always computed from the earliest imported transaction to the last fully
   // complete month, regardless of the selected view period. This mirrors the
@@ -321,32 +354,65 @@ export async function GET(request: NextRequest) {
 
     let rolloverAmount = 0;
     if (bl.rollover) {
-      // Rollover should never include periods before the currently applicable budget starts.
-      // This guarantees the first month/period of a budget has zero rollover.
-      const lineRolloverStart =
-        applicableBudget.startDate > rolloverHistoryStart
-          ? applicableBudget.startDate
-          : rolloverHistoryStart;
-
+      // Use rolloverHistoryStart as computed by findRolloverHistoryStart.
+      // When resetRollover is true, findRolloverHistoryStart returns the current budget's
+      // own startDate, so rolloverHistoryStart == applicableBudget.startDate and rollover
+      // accumulates only within the current budget's period.
+      // When resetRollover is false, rolloverHistoryStart may be earlier (reaching back
+      // through the chain of non-resetting budgets to the last one that reset), and we
+      // correctly accumulate rollover from that earlier start date.
       const completePeriods = getCompletePeriodsBetween(
         period,
-        lineRolloverStart,
+        rolloverHistoryStart,
         viewPeriod.start,
         applicableBudget.startDate,
       );
 
+      // Direct tag IDs of this line — used to match against historical budget lines
+      const currentDirectTagIds = bl.tags.map((blt) => blt.tag.id);
+
       for (const p of completePeriods) {
-        const periodBudget = scaleBudgetAmount(
-          bl.amount,
-          period,
-          { start: p.start, end: p.end, label: '', type: 'custom' },
-          applicableBudget.startDate,
-        );
+        // Find which budget was active during this sub-period.
+        // When resetRollover is false, earlier periods may belong to a previous budget
+        // that had different per-line amounts; use that budget's matching line amount.
+        const periodBudgetEntry = findApplicableBudget(allBudgets, p.start);
+
+        let periodBudgetValue: number;
+        if (periodBudgetEntry.id === applicableBudget.id) {
+          // Current budget — use current line's amount and anchor
+          periodBudgetValue = scaleBudgetAmount(
+            bl.amount,
+            period,
+            { start: p.start, end: p.end, label: '', type: 'custom' },
+            applicableBudget.startDate,
+          );
+        } else {
+          // Previous budget — find the best-matching line by direct tag ID overlap
+          const candidates = historicalLinesByBudgetId.get(periodBudgetEntry.id) ?? [];
+          const currentTagIdSet = new Set(currentDirectTagIds);
+          let bestMatch: { amount: number; period: string } | null = null;
+          let bestOverlap = 0;
+          for (const candidate of candidates) {
+            const overlap = candidate.directTagIds.filter((id) => currentTagIdSet.has(id)).length;
+            if (overlap > bestOverlap) {
+              bestOverlap = overlap;
+              bestMatch = candidate;
+            }
+          }
+          periodBudgetValue = bestMatch
+            ? scaleBudgetAmount(
+                bestMatch.amount,
+                bestMatch.period as BudgetPeriodType,
+                { start: p.start, end: p.end, label: '', type: 'custom' },
+                periodBudgetEntry.startDate,
+              )
+            : 0; // No matching line in that historical budget → $0 for those periods
+        }
 
         // Filter already-loaded historical transactions to this sub-period
         const periodTxs = historicalTxs.filter((tx) => tx.date >= p.start && tx.date <= p.end);
         const periodActual = computeActual(periodTxs, tagSet);
-        rolloverAmount += periodBudget - periodActual;
+        rolloverAmount += periodBudgetValue - periodActual;
       }
     }
 
