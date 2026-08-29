@@ -1,45 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { matchTypeSchema, readJson, regexPatternSchema } from '@/lib/api-validation';
+import { fromCents } from '@/lib/money';
 import { prisma } from '@/lib/prisma';
+import { compileSafeRegex } from '@/lib/safe-regex';
 
-type MatchType = 'exact' | 'regex';
-
-const VALID_MATCH_TYPES: readonly MatchType[] = ['exact', 'regex'];
-
-function matchesPattern(name: string, pattern: string, matchType: MatchType): boolean {
-  if (matchType === 'exact') {
-    return name.toLowerCase() === pattern.toLowerCase();
-  }
-
-  try {
-    return new RegExp(pattern, 'i').test(name);
-  } catch {
-    return false;
-  }
-}
+const previewSchema = z
+  .object({ pattern: regexPatternSchema, matchType: matchTypeSchema.default('regex') })
+  .strict();
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const pattern = String(body?.pattern ?? '').trim();
-  const rawMatchType = body?.matchType ?? 'regex';
-
-  if (!pattern) {
-    return NextResponse.json({ tagged: [], taggedTotal: 0, untagged: [], untaggedTotal: 0 });
-  }
-
-  if (!VALID_MATCH_TYPES.includes(rawMatchType as MatchType)) {
-    return NextResponse.json({ error: 'matchType must be "exact" or "regex"' }, { status: 400 });
-  }
-
-  const matchType = rawMatchType as MatchType;
-
-  if (matchType === 'regex') {
+  const body = await readJson(request, previewSchema);
+  if (!body.success) return body.response;
+  let compiledRegex: ReturnType<typeof compileSafeRegex> | null = null;
+  if (body.data.matchType === 'regex') {
     try {
-      new RegExp(pattern, 'i');
-    } catch {
-      return NextResponse.json({ error: 'Invalid regex pattern' }, { status: 400 });
+      compiledRegex = compileSafeRegex(body.data.pattern);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'Invalid regex pattern' },
+        { status: 400 },
+      );
     }
   }
-
   const transactions = await prisma.transaction.findMany({
     select: {
       id: true,
@@ -48,35 +31,37 @@ export async function POST(request: NextRequest) {
       normalizedName: true,
       debit: true,
       credit: true,
-      tags: {
-        include: {
-          tag: { select: { id: true, name: true, color: true, isSource: true } },
-        },
-      },
+      tags: { include: { tag: { select: { id: true, name: true, color: true, isSource: true } } } },
     },
     orderBy: { date: 'desc' },
+    take: 10_001,
   });
-
-  const matching = transactions.filter((tx) =>
-    matchesPattern(tx.normalizedName, pattern, matchType),
+  if (transactions.length > 10_000) {
+    return NextResponse.json({ error: 'Too many transactions to preview' }, { status: 413 });
+  }
+  const matching = transactions.filter((transaction) =>
+    body.data.matchType === 'exact'
+      ? transaction.normalizedName.toLocaleLowerCase() === body.data.pattern.toLocaleLowerCase()
+      : compiledRegex!.test(transaction.normalizedName),
   );
-
-  const taggedAll = matching.filter((tx) => tx.tags.some((tt) => !tt.tag.isSource));
-  const untaggedAll = matching.filter((tx) => tx.tags.every((tt) => tt.tag.isSource));
-
-  const toDisplay = (tx: (typeof transactions)[number]) => ({
-    id: tx.id,
-    date: tx.date.toISOString(),
-    name: tx.name,
-    debit: tx.debit,
-    credit: tx.credit,
-    tags: tx.tags.map((tt) => tt.tag),
+  const tagged = matching.filter((transaction) =>
+    transaction.tags.some((entry) => !entry.tag.isSource),
+  );
+  const untagged = matching.filter((transaction) =>
+    transaction.tags.every((entry) => entry.tag.isSource),
+  );
+  const format = (transaction: (typeof transactions)[number]) => ({
+    id: transaction.id,
+    date: transaction.date.toISOString(),
+    name: transaction.name,
+    debit: fromCents(transaction.debit),
+    credit: fromCents(transaction.credit),
+    tags: transaction.tags.map((entry) => entry.tag),
   });
-
   return NextResponse.json({
-    tagged: taggedAll.slice(0, 20).map(toDisplay),
-    taggedTotal: taggedAll.length,
-    untagged: untaggedAll.slice(0, 20).map(toDisplay),
-    untaggedTotal: untaggedAll.length,
+    tagged: tagged.slice(0, 20).map(format),
+    taggedTotal: tagged.length,
+    untagged: untagged.slice(0, 20).map(format),
+    untaggedTotal: untagged.length,
   });
 }

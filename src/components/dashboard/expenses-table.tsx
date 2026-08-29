@@ -26,6 +26,10 @@ const PERIOD_LABEL: Record<string, string> = {
 
 const UNCATEGORIZED_KEY = '__uncategorized__';
 
+function lineIdentity(line: BudgetSummaryLine): string {
+  return line.budgetLine.identityKey ?? line.budgetLine.id;
+}
+
 function pct(value: number, total: number): string {
   if (total === 0) return '—';
   return `${((value / total) * 100).toFixed(1)}%`;
@@ -226,7 +230,7 @@ export function ExpensesTable({
   const periodLineMap = new Map<string, BudgetSummaryLine>();
   if (hasPeriod) {
     for (const pl of periodSummaryLines!) {
-      periodLineMap.set(pl.budgetLine.id, pl);
+      periodLineMap.set(lineIdentity(pl), pl);
     }
   }
 
@@ -355,7 +359,7 @@ export function ExpensesTable({
                   // Period lines for this category
                   const periodCatLines = hasPeriod
                     ? (lines
-                        .map((l) => periodLineMap.get(l.budgetLine.id))
+                        .map((l) => periodLineMap.get(lineIdentity(l)))
                         .filter(Boolean) as BudgetSummaryLine[])
                     : undefined;
 
@@ -393,7 +397,7 @@ export function ExpensesTable({
                             line={line}
                             totalYearlyBudget={totalYearlyBudget}
                             totalYearlyNetIncome={totalYearlyNetIncome}
-                            periodLine={periodLineMap.get(line.budgetLine.id)}
+                            periodLine={periodLineMap.get(lineIdentity(line))}
                           />
                         ))}
 
@@ -416,7 +420,7 @@ export function ExpensesTable({
                     const collapsed = collapsedIds.has(UNCATEGORIZED_KEY);
                     const periodUncatLines = hasPeriod
                       ? (uncategorizedLines
-                          .map((l) => periodLineMap.get(l.budgetLine.id))
+                          .map((l) => periodLineMap.get(lineIdentity(l)))
                           .filter(Boolean) as BudgetSummaryLine[])
                       : undefined;
 
@@ -451,7 +455,7 @@ export function ExpensesTable({
                               line={line}
                               totalYearlyBudget={totalYearlyBudget}
                               totalYearlyNetIncome={totalYearlyNetIncome}
-                              periodLine={periodLineMap.get(line.budgetLine.id)}
+                              periodLine={periodLineMap.get(lineIdentity(line))}
                             />
                           ))}
                         {!collapsed && (

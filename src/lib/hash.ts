@@ -10,6 +10,10 @@ export async function hashTransaction(fields: {
   source: string;
 }): Promise<string> {
   const input = `${fields.date}|${fields.name}|${fields.debit}|${fields.credit}|${fields.source}`;
+  return hashText(input);
+}
+
+export async function hashText(input: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(input);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);

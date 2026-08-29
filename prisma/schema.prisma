@@ -12,12 +12,13 @@ model Transaction {
   date           DateTime
   name           String
   normalizedName String
-  debit          Float            @default(0)
-  credit         Float            @default(0)
+  debit          Int              @default(0) // integer cents
+  credit         Int              @default(0) // integer cents
   source         String           @default("")
   notes          String           @default("")
   archived       Boolean          @default(false)
-  csvHash        String           @unique
+  csvHash        String
+  importKey      String?          @unique
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   tags           TransactionTag[]
@@ -25,6 +26,7 @@ model Transaction {
   @@index([normalizedName])
   @@index([date])
   @@index([archived])
+  @@index([csvHash])
 }
 
 model Tag {
@@ -34,7 +36,7 @@ model Tag {
   isSource            Boolean                @default(false)
   order               Int                    @default(0)
   parentId            String?
-  parent              Tag?                   @relation("TagHierarchy", fields: [parentId], references: [id])
+  parent              Tag?                   @relation("TagHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children            Tag[]                  @relation("TagHierarchy")
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
@@ -43,6 +45,8 @@ model Tag {
   autoTagRules        AutoTagRule[]
   csvMappings         CsvMapping[]
   untrackedCategories UntrackedCategoryTag[]
+
+  @@index([parentId])
 }
 
 model TransactionTag {
@@ -53,6 +57,7 @@ model TransactionTag {
   tag           Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@unique([transactionId, tagId])
+  @@index([tagId])
 }
 
 model Budget {
@@ -76,22 +81,28 @@ model BudgetCategory {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   budgetLines BudgetLine[]
+
+  @@unique([id, budgetId])
+  @@index([budgetId])
 }
 
 model BudgetLine {
   id         String          @id @default(cuid())
   name       String
   period     String // "monthly" | "biweekly" | "yearly"
-  amount     Float
+  amount     Int // integer cents
   rollover   Boolean         @default(false)
   order      Int             @default(0)
   budgetId   String
   budget     Budget          @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   categoryId String?
-  category   BudgetCategory? @relation(fields: [categoryId], references: [id])
+  category   BudgetCategory? @relation(fields: [categoryId, budgetId], references: [id, budgetId], onDelete: Restrict)
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
   tags       BudgetLineTag[]
+
+  @@index([budgetId])
+  @@index([categoryId, budgetId])
 }
 
 model BudgetLineTag {
@@ -102,21 +113,24 @@ model BudgetLineTag {
   tag          Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@unique([budgetLineId, tagId])
+  @@index([tagId])
 }
 
 model CsvMapping {
-  id             String   @id @default(cuid())
-  name           String   @unique
-  dateColumn     String
-  nameColumn     String
-  debitColumn    String
-  creditColumn   String
-  sourceColumn   String   @default("")
-  dateFormat     String   @default("YYYY-MM-DD")
-  skipFirstRow   Boolean  @default(false)
-  sourceTagId    String?
-  sourceTag      Tag?     @relation(fields: [sourceTagId], references: [id])
-  createdAt      DateTime @default(now())
+  id           String   @id @default(cuid())
+  name         String   @unique
+  dateColumn   String
+  nameColumn   String
+  debitColumn  String
+  creditColumn String
+  sourceColumn String   @default("")
+  dateFormat   String   @default("YYYY-MM-DD")
+  skipFirstRow Boolean  @default(false)
+  sourceTagId  String?
+  sourceTag    Tag?     @relation(fields: [sourceTagId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  @@index([sourceTagId])
 }
 
 model AutoTagRule {
@@ -126,6 +140,8 @@ model AutoTagRule {
   tagId     String
   tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+
+  @@index([tagId])
 }
 
 model IncomeSource {
@@ -133,13 +149,15 @@ model IncomeSource {
   budgetId    String
   budget      Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   name        String
-  netAmount   Float
+  netAmount   Int // integer cents
   netPeriod   String // "monthly" | "biweekly" | "yearly"
-  grossAmount Float?
+  grossAmount Int? // integer cents
   grossPeriod String? // "monthly" | "biweekly" | "yearly"
   order       Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([budgetId])
 }
 
 model UntrackedCategory {
@@ -151,6 +169,8 @@ model UntrackedCategory {
   createdAt DateTime               @default(now())
   updatedAt DateTime               @updatedAt
   tags      UntrackedCategoryTag[]
+
+  @@index([budgetId])
 }
 
 model UntrackedCategoryTag {
@@ -161,4 +181,5 @@ model UntrackedCategoryTag {
   tag                 Tag               @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@unique([untrackedCategoryId, tagId])
+  @@index([tagId])
 }

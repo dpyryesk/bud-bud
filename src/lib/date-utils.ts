@@ -284,14 +284,22 @@ export function formatCurrency(amount: number): string {
 export function parseDateInputAsUtc(dateInput: string): Date {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateInput);
   if (!match) {
-    return new Date(dateInput);
+    return new Date(Number.NaN);
   }
 
   const year = Number(match[1]);
   const monthIndex = Number(match[2]) - 1;
   const day = Number(match[3]);
 
-  return new Date(Date.UTC(year, monthIndex, day, 0, 0, 0, 0));
+  const parsed = new Date(Date.UTC(year, monthIndex, day, 0, 0, 0, 0));
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== monthIndex ||
+    parsed.getUTCDate() !== day
+  ) {
+    return new Date(Number.NaN);
+  }
+  return parsed;
 }
 
 /**

@@ -1,7 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { Prisma } from '@/generated/prisma/client';
+import { incomeSourceMoneyFromCents } from '@/lib/api-formatters';
+import {
+  budgetPeriodSchema,
+  idSchema,
+  nameSchema,
+  nonNegativeMoneyInputSchema,
+  orderSchema,
+  readJson,
+} from '@/lib/api-validation';
+import { toCents } from '@/lib/money';
 import { prisma } from '@/lib/prisma';
 
-// GET /api/income-sources?budgetId=...
+const createIncomeSourceSchema = z
+  .object({
+    budgetId: idSchema,
+    name: nameSchema,
+    netAmount: nonNegativeMoneyInputSchema,
+    netPeriod: budgetPeriodSchema,
+    grossAmount: nonNegativeMoneyInputSchema.nullable().optional(),
+    grossPeriod: budgetPeriodSchema.nullable().optional(),
+    order: orderSchema.optional(),
+  })
+  .refine(
+    (value) => value.grossAmount == null || value.grossPeriod != null,
+    'grossPeriod is required when grossAmount is provided',
+  );
+
 export async function GET(request: NextRequest) {
   const budgetId = request.nextUrl.searchParams.get('budgetId');
   if (!budgetId) {
@@ -11,29 +37,59 @@ export async function GET(request: NextRequest) {
     where: { budgetId },
     orderBy: { order: 'asc' },
   });
-  return NextResponse.json(sources);
+  return NextResponse.json(sources.map(incomeSourceMoneyFromCents));
 }
 
-// POST /api/income-sources
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const { budgetId, name, netAmount, netPeriod, grossAmount, grossPeriod, order } = body;
-  if (!budgetId || !name || netAmount == null || !netPeriod) {
-    return NextResponse.json(
-      { error: 'budgetId, name, netAmount, netPeriod are required' },
-      { status: 400 },
-    );
+  const parsed = await readJson(request, createIncomeSourceSchema);
+  if (!parsed.success) return parsed.response;
+  const value = parsed.data;
+
+  try {
+    const source = await prisma.$transaction(async (tx) => {
+      const budget = await tx.budget.findUnique({
+        where: { id: value.budgetId },
+        select: { id: true },
+      });
+      if (!budget) throw new RouteError('Budget not found', 404);
+
+      const order =
+        value.order ??
+        ((
+          await tx.incomeSource.aggregate({
+            where: { budgetId: value.budgetId },
+            _max: { order: true },
+          })
+        )._max.order ?? -1) + 1;
+      return tx.incomeSource.create({
+        data: {
+          budgetId: value.budgetId,
+          name: value.name,
+          netAmount: toCents(value.netAmount),
+          netPeriod: value.netPeriod,
+          grossAmount: value.grossAmount == null ? null : toCents(value.grossAmount),
+          grossPeriod: value.grossAmount == null ? null : value.grossPeriod,
+          order,
+        },
+      });
+    });
+    return NextResponse.json(incomeSourceMoneyFromCents(source), { status: 201 });
+  } catch (error) {
+    if (error instanceof RouteError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+      return NextResponse.json({ error: 'Budget not found' }, { status: 404 });
+    }
+    return NextResponse.json({ error: 'Unable to create income source' }, { status: 500 });
   }
-  const source = await prisma.incomeSource.create({
-    data: {
-      budgetId,
-      name,
-      netAmount: Number(netAmount),
-      netPeriod,
-      grossAmount: grossAmount != null ? Number(grossAmount) : null,
-      grossPeriod: grossPeriod ?? null,
-      order: order ?? 0,
-    },
-  });
-  return NextResponse.json(source, { status: 201 });
+}
+
+class RouteError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
 }

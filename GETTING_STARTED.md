@@ -24,10 +24,10 @@ categories:
 
 Choose **one** of the two options below. Docker is the easiest if you just want to run the app.
 
-| Option          | What you need                                                                    |
-| --------------- | -------------------------------------------------------------------------------- |
-| **A — Docker**  | [Docker Desktop](https://www.docker.com/products/docker-desktop/)                |
-| **B — Node.js** | [Node.js](https://nodejs.org/) v18+ and [pnpm](https://pnpm.io/installation) v8+ |
+| Option          | What you need                                                             |
+| --------------- | ------------------------------------------------------------------------- |
+| **A — Docker**  | [Docker Desktop](https://www.docker.com/products/docker-desktop/)         |
+| **B — Node.js** | [Node.js](https://nodejs.org/) `^20.19`, `^22.12`, or `>=24` and pnpm v10 |
 
 ---
 
@@ -43,8 +43,9 @@ cd bud-bud
 docker compose up
 ```
 
-Docker builds the image on the first run (takes a few minutes), applies database migrations, and
-starts the server. Open [http://localhost:3000](http://localhost:3000).
+Docker builds the image on the first run (takes a few minutes), creates a verified backup before
+upgrades, applies database migrations, and starts the server on localhost. Open
+[http://localhost:3000](http://localhost:3000).
 
 Your data is stored in `./data/bud.db` on the host and persists between restarts.
 
@@ -70,8 +71,9 @@ That is the only command needed. It automatically:
 3. Applies database migrations and regenerates the Prisma client.
 4. Builds the production bundle and starts the server.
 
-The database file `prisma/bud.db` is created on the first run — back it up if you want to
-preserve your data between sessions.
+The database file `data/bud.db` is created on the first run. Before applying migrations, the setup
+command automatically creates a verified `data/bud-backup-*.db` snapshot. Run `pnpm db:backup`
+for an additional on-demand snapshot.
 
 Open [http://localhost:3000](http://localhost:3000).
 
@@ -297,8 +299,8 @@ that source, making it easy to filter by account later.
 The preview table shows every row with a status badge:
 
 - **New** — will be imported.
-- **Duplicate (in file)** — the same row appears twice in the CSV; only the first will import.
-- **Duplicate (in DB)** — already in the database from a previous import; will be skipped.
+- **Duplicate (in DB)** — this exact file, mapping, and row position was already imported and will
+  be skipped. Legitimate identical-looking rows at different positions are preserved.
 - **Error** — missing date or name; will be skipped.
 
 Verify the dates and amounts look correct, then click **Import**.
@@ -554,5 +556,5 @@ Once you're comfortable with the sample data:
 4. Your previously saved auto-tag rules will fire automatically.
 5. Review remaining untagged transactions manually.
 
-Repeat monthly. Because the app deduplicates by content hash, re-importing a statement you've
-already imported is safe — duplicates are silently skipped.
+Repeat monthly. Re-importing the exact same statement with the same mapping is safe and is skipped
+by a file-and-row import key. Separate identical-looking transactions are not discarded.

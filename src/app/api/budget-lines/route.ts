@@ -1,124 +1,116 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { Prisma } from '@/generated/prisma/client';
 import { prisma } from '@/lib/prisma';
+import {
+  budgetPeriodSchema,
+  idSchema,
+  nameSchema,
+  nonNegativeMoneyInputSchema,
+  readJson,
+  tagIdsSchema,
+} from '@/lib/api-validation';
+import { budgetLineMoneyFromCents } from '@/lib/api-formatters';
+import { toCents } from '@/lib/money';
 
-// GET /api/budget-lines?budgetId=... - List budget lines for a specific budget
+const createBudgetLineSchema = z.object({
+  name: nameSchema,
+  period: budgetPeriodSchema,
+  amount: nonNegativeMoneyInputSchema,
+  rollover: z.boolean().default(false),
+  tagIds: tagIdsSchema.default([]),
+  categoryId: idSchema.nullable().optional(),
+  budgetId: idSchema,
+});
+
+const tagSelect = { id: true, name: true, color: true, isSource: true } as const;
+
+function formatBudgetLine<
+  T extends {
+    amount: number;
+    tags: Array<{ tag: { id: string; name: string; color: string; isSource: boolean } }>;
+  },
+>(line: T) {
+  return {
+    ...budgetLineMoneyFromCents(line),
+    tags: line.tags.map((assignment) => assignment.tag),
+  };
+}
+
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const budgetId = searchParams.get('budgetId');
-
+  const budgetId = request.nextUrl.searchParams.get('budgetId');
   if (!budgetId) {
     return NextResponse.json({ error: 'budgetId query param is required' }, { status: 400 });
   }
 
   const budgetLines = await prisma.budgetLine.findMany({
     where: { budgetId },
-    include: {
-      tags: {
-        include: {
-          tag: {
-            select: { id: true, name: true, color: true, isSource: true },
-          },
-        },
-      },
-    },
+    include: { tags: { include: { tag: { select: tagSelect } } } },
     orderBy: [{ categoryId: 'asc' }, { order: 'asc' }, { name: 'asc' }],
   });
-
-  const formatted = budgetLines.map((bl) => ({
-    id: bl.id,
-    name: bl.name,
-    period: bl.period,
-    amount: bl.amount,
-    rollover: bl.rollover,
-    order: bl.order,
-    categoryId: bl.categoryId,
-    tags: bl.tags.map((blt) => blt.tag),
-  }));
-
-  return NextResponse.json(formatted);
+  return NextResponse.json(budgetLines.map(formatBudgetLine));
 }
 
-// POST /api/budget-lines - Create a new budget line
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const { name, period, amount, rollover, tagIds, categoryId, budgetId } = body;
+  const parsed = await readJson(request, createBudgetLineSchema);
+  if (!parsed.success) return parsed.response;
+  const { name, period, amount, rollover, tagIds, categoryId, budgetId } = parsed.data;
 
-  if (!name || !period || amount === undefined) {
-    return NextResponse.json({ error: 'name, period, and amount are required' }, { status: 400 });
-  }
+  try {
+    const budgetLine = await prisma.$transaction(async (tx) => {
+      const [budget, category, validTagCount] = await Promise.all([
+        tx.budget.findUnique({ where: { id: budgetId }, select: { id: true } }),
+        categoryId
+          ? tx.budgetCategory.findUnique({
+              where: { id: categoryId },
+              select: { budgetId: true },
+            })
+          : null,
+        tx.tag.count({ where: { id: { in: tagIds }, isSource: false } }),
+      ]);
+      if (!budget) throw new RouteError('Budget not found', 404);
+      if (categoryId && (!category || category.budgetId !== budgetId)) {
+        throw new RouteError('Category does not belong to selected budget', 400);
+      }
+      if (validTagCount !== tagIds.length) {
+        throw new RouteError('All budget-line tags must be existing category tags', 400);
+      }
 
-  if (!budgetId) {
-    return NextResponse.json({ error: 'budgetId is required' }, { status: 400 });
-  }
-
-  const budgetExists = await prisma.budget.findUnique({ where: { id: budgetId } });
-  if (!budgetExists) {
-    return NextResponse.json({ error: 'Budget not found' }, { status: 404 });
-  }
-
-  const resolvedBudgetId: string = budgetId;
-
-  if (categoryId) {
-    const category = await prisma.budgetCategory.findUnique({
-      where: { id: categoryId },
-      select: { budgetId: true },
-    });
-
-    if (!category) {
-      return NextResponse.json({ error: 'Category not found' }, { status: 404 });
-    }
-
-    if (category.budgetId !== resolvedBudgetId) {
-      return NextResponse.json(
-        { error: 'Category does not belong to selected budget' },
-        { status: 400 },
-      );
-    }
-  }
-
-  // Assign order as max + 1 within the category (or globally if uncategorized)
-  const maxOrder = await prisma.budgetLine.aggregate({
-    where: {
-      budgetId: resolvedBudgetId,
-      categoryId: categoryId ?? null,
-    },
-    _max: { order: true },
-  });
-  const order = (maxOrder._max.order ?? -1) + 1;
-
-  const budgetLine = await prisma.budgetLine.create({
-    data: {
-      name,
-      period,
-      amount: parseFloat(amount),
-      rollover: rollover || false,
-      order,
-      budgetId: resolvedBudgetId,
-      categoryId: categoryId ?? null,
-      tags: {
-        create: (tagIds || []).map((tagId: string) => ({ tagId })),
-      },
-    },
-    include: {
-      tags: {
-        include: {
-          tag: { select: { id: true, name: true, color: true, isSource: true } },
+      const maxOrder = await tx.budgetLine.aggregate({
+        where: { budgetId, categoryId: categoryId ?? null },
+        _max: { order: true },
+      });
+      return tx.budgetLine.create({
+        data: {
+          name,
+          period,
+          amount: toCents(amount),
+          rollover,
+          order: (maxOrder._max.order ?? -1) + 1,
+          budgetId,
+          categoryId: categoryId ?? null,
+          tags: { create: tagIds.map((tagId) => ({ tagId })) },
         },
-      },
-    },
-  });
+        include: { tags: { include: { tag: { select: tagSelect } } } },
+      });
+    });
+    return NextResponse.json(formatBudgetLine(budgetLine), { status: 201 });
+  } catch (error) {
+    if (error instanceof RouteError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+      return NextResponse.json({ error: 'Invalid related record' }, { status: 400 });
+    }
+    return NextResponse.json({ error: 'Unable to create budget line' }, { status: 500 });
+  }
+}
 
-  return NextResponse.json(
-    {
-      id: budgetLine.id,
-      name: budgetLine.name,
-      period: budgetLine.period,
-      amount: budgetLine.amount,
-      rollover: budgetLine.rollover,
-      order: budgetLine.order,
-      categoryId: budgetLine.categoryId,
-      tags: budgetLine.tags.map((blt) => blt.tag),
-    },
-    { status: 201 },
-  );
+class RouteError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
 }

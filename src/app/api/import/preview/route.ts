@@ -1,191 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  checkCsvRequest,
+  importMappingSchema,
+  parseCsvFile,
+  type ParsedCsvRow,
+} from '@/lib/csv-import';
 import { prisma } from '@/lib/prisma';
-import { hashTransaction } from '@/lib/hash';
-import { normalizeTransactionName } from '@/lib/normalize';
-import { parseDateInputAsUtc } from '@/lib/date-utils';
-import Papa from 'papaparse';
-import { parse as parseDate } from 'date-fns';
-import type { ParsedTransaction } from '@/types';
 
-// POST /api/import/preview - Parse CSV and check for duplicates without importing
+async function existingImportKeys(rows: ParsedCsvRow[]) {
+  const keys = rows.map((row) => row.importKey);
+  const found = new Set<string>();
+  for (let offset = 0; offset < keys.length; offset += 500) {
+    const transactions = await prisma.transaction.findMany({
+      where: { importKey: { in: keys.slice(offset, offset + 500) } },
+      select: { importKey: true },
+    });
+    for (const transaction of transactions) {
+      if (transaction.importKey) found.add(transaction.importKey);
+    }
+  }
+  return found;
+}
+
 export async function POST(request: NextRequest) {
+  if (!checkCsvRequest(request)) {
+    return NextResponse.json({ error: 'CSV request is too large' }, { status: 413 });
+  }
   try {
     const formData = await request.formData();
-    const file = formData.get('file') as File | null;
-    const mappingJson = formData.get('mapping') as string | null;
-
-    if (!file || !mappingJson) {
+    const file = formData.get('file');
+    const mappingRaw = formData.get('mapping');
+    if (!(file instanceof File) || typeof mappingRaw !== 'string') {
       return NextResponse.json({ error: 'File and mapping are required' }, { status: 400 });
     }
-
-    const mapping = JSON.parse(mappingJson);
-    const csvText = await file.text();
-
-    const parseResult = Papa.parse<string[]>(csvText, {
-      header: false,
-      skipEmptyLines: true,
-    });
-
-    if (parseResult.errors.length > 0 && parseResult.data.length === 0) {
+    let mappingJson: unknown;
+    try {
+      mappingJson = JSON.parse(mappingRaw);
+    } catch {
+      return NextResponse.json({ error: 'Mapping must be valid JSON' }, { status: 400 });
+    }
+    const mapping = importMappingSchema.safeParse(mappingJson);
+    if (!mapping.success) {
       return NextResponse.json(
-        { error: 'CSV parsing failed', details: parseResult.errors },
+        { error: 'Invalid mapping', issues: mapping.error.issues.map((issue) => issue.message) },
         { status: 400 },
       );
     }
-
-    const getColumnValue = (row: string[], column: string | null | undefined) => {
-      if (!column || column === 'none') return '';
-      const columnNumber = Number(column);
-      if (!Number.isInteger(columnNumber) || columnNumber < 1) return '';
-      return (row[columnNumber - 1] || '').trim();
-    };
-
-    const csvRows = mapping.skipFirstRow ? parseResult.data.slice(1) : parseResult.data;
-    const rows: ParsedTransaction[] = [];
-
-    for (const row of csvRows) {
-      const rawName = getColumnValue(row, mapping.nameColumn);
-      const rawDate = getColumnValue(row, mapping.dateColumn);
-      const rawDebit = getColumnValue(row, mapping.debitColumn).replace(/[,$]/g, '');
-      const rawCredit = getColumnValue(row, mapping.creditColumn).replace(/[,$]/g, '');
-      const rawSource = getColumnValue(row, mapping.sourceColumn);
-
-      if (!rawName || !rawDate) {
-        rows.push({
-          date: rawDate,
-          name: rawName,
-          debit: 0,
-          credit: 0,
-          source: rawSource,
-          csvHash: '',
-          normalizedName: '',
-          isDuplicate: false,
-          isDuplicateInDb: false,
-          isDuplicateInCsv: false,
-          error: 'Missing name or date',
-        });
-        continue;
-      }
-
-      const debit = Math.abs(parseFloat(rawDebit) || 0);
-      const credit = Math.abs(parseFloat(rawCredit) || 0);
-
-      let date: Date;
-      try {
-        if (mapping.dateFormat && mapping.dateFormat !== 'YYYY-MM-DD') {
-          const fnsFormat = mapping.dateFormat
-            .replace('YYYY', 'yyyy')
-            .replace('DD', 'dd')
-            .replace('MM', 'MM');
-          const localDate = parseDate(rawDate, fnsFormat, new Date());
-          // Normalize to UTC midnight using local calendar components
-          date = new Date(
-            Date.UTC(localDate.getFullYear(), localDate.getMonth(), localDate.getDate()),
-          );
-        } else {
-          // YYYY-MM-DD strings are already UTC midnight per ECMAScript spec, but
-          // parseDateInputAsUtc uses the component approach so behaviour is explicit
-          // and immune to any future runtime changes.
-          date = parseDateInputAsUtc(rawDate);
-        }
-
-        if (isNaN(date.getTime())) {
-          rows.push({
-            date: rawDate,
-            name: rawName,
-            debit,
-            credit,
-            source: rawSource,
-            csvHash: '',
-            normalizedName: '',
-            isDuplicate: false,
-            isDuplicateInDb: false,
-            isDuplicateInCsv: false,
-            error: 'Invalid date format',
-          });
-          continue;
-        }
-      } catch {
-        rows.push({
-          date: rawDate,
-          name: rawName,
-          debit,
-          credit,
-          source: rawSource,
-          csvHash: '',
-          normalizedName: '',
-          isDuplicate: false,
-          isDuplicateInDb: false,
-          isDuplicateInCsv: false,
-          error: 'Date parse error',
-        });
-        continue;
-      }
-
-      const dateStr = date.toISOString().split('T')[0];
-      const csvHash = await hashTransaction({
-        date: dateStr,
-        name: rawName,
-        debit,
-        credit,
-        source: rawSource,
-      });
-      const normalizedName = normalizeTransactionName(rawName);
-
-      rows.push({
-        date: dateStr,
-        name: rawName,
-        normalizedName,
-        debit,
-        credit,
-        source: rawSource,
-        csvHash,
-        isDuplicate: false,
-        isDuplicateInDb: false,
-        isDuplicateInCsv: false,
-      });
-    }
-
-    // Check DB for existing hashes in one query
-    const validRows = rows.filter((r) => !r.error && r.csvHash);
-    const allHashes = validRows.map((r) => r.csvHash);
-
-    const existing = await prisma.transaction.findMany({
-      where: { csvHash: { in: allHashes } },
-      select: { csvHash: true },
-    });
-    const dbHashes = new Set(existing.map((t) => t.csvHash));
-
-    // Detect within-CSV duplicates and DB duplicates
-    const seenInCsv = new Set<string>();
-    const result: ParsedTransaction[] = rows.map((row) => {
-      if (row.error || !row.csvHash) return row;
-
-      const isDuplicateInDb = dbHashes.has(row.csvHash);
-      const isDuplicateInCsv = seenInCsv.has(row.csvHash);
-      seenInCsv.add(row.csvHash);
-
+    const rows = await parseCsvFile(file, mapping.data);
+    const existing = await existingImportKeys(rows.filter((row) => !row.error));
+    const result = rows.map((row) => {
+      const duplicate = existing.has(row.importKey);
       return {
-        ...row,
-        isDuplicateInDb,
-        isDuplicateInCsv,
-        isDuplicate: isDuplicateInDb || isDuplicateInCsv,
+        rowIndex: row.rowIndex,
+        date: row.date,
+        name: row.name,
+        normalizedName: row.normalizedName,
+        debit: row.debit,
+        credit: row.credit,
+        source: row.source,
+        csvHash: row.csvHash,
+        importKey: row.importKey,
+        ...(row.error && { error: row.error }),
+        isDuplicate: duplicate,
+        isDuplicateInDb: duplicate,
+        isDuplicateInCsv: false,
       };
     });
-
-    const errors = result.filter((r) => r.error).length;
-    const duplicates = result.filter((r) => !r.error && r.isDuplicate).length;
-    const newCount = result.filter((r) => !r.error && !r.isDuplicate).length;
-
     return NextResponse.json({
       total: result.length,
-      newCount,
-      duplicates,
-      errors,
+      newCount: result.filter((row) => !row.error && !row.isDuplicate).length,
+      duplicates: result.filter((row) => !row.error && row.isDuplicate).length,
+      errors: result.filter((row) => row.error).length,
       rows: result,
     });
-  } catch (e) {
-    console.error('Preview failed:', e);
-    return NextResponse.json({ error: 'Preview failed' }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Preview failed';
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { fromCents } from '@/lib/money';
+import { z } from 'zod';
 
 const MONTH_LABELS = [
   'Jan',
@@ -20,12 +22,16 @@ const MONTH_LABELS = [
 // Returns 12 data points with income and spending totals per month.
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const yearParam = searchParams.get('year');
-  const year = yearParam ? parseInt(yearParam, 10) : NaN;
-
-  if (isNaN(year)) {
+  const resultYear = z.coerce
+    .number()
+    .int()
+    .min(1900)
+    .max(2200)
+    .safeParse(searchParams.get('year'));
+  if (!resultYear.success) {
     return NextResponse.json({ error: 'year is required and must be a number' }, { status: 400 });
   }
+  const year = resultYear.data;
 
   const startDate = new Date(Date.UTC(year, 0, 1));
   const endDate = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
@@ -51,8 +57,8 @@ export async function GET(request: NextRequest) {
 
   const result = MONTH_LABELS.map((month, i) => ({
     month,
-    income: byMonth[i].income,
-    spending: byMonth[i].spending,
+    income: fromCents(byMonth[i].income),
+    spending: fromCents(byMonth[i].spending),
   }));
 
   return NextResponse.json(result);

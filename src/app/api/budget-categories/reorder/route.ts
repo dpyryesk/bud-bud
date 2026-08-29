@@ -1,53 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { idSchema, orderSchema, readJson } from '@/lib/api-validation';
 import { prisma } from '@/lib/prisma';
 
-// PATCH /api/budget-categories/reorder - Bulk update category order values
-// Body: { updates: [{ id: string; order: number }] }
+const schema = z
+  .object({
+    updates: z
+      .array(z.object({ id: idSchema, order: orderSchema }).strict())
+      .min(1)
+      .max(500),
+  })
+  .strict()
+  .refine(
+    (value) => new Set(value.updates.map((item) => item.id)).size === value.updates.length,
+    'Duplicate ids are not allowed',
+  )
+  .refine(
+    (value) => new Set(value.updates.map((item) => item.order)).size === value.updates.length,
+    'Duplicate order values are not allowed',
+  );
+
 export async function PATCH(request: NextRequest) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
-  }
-
-  const updates =
-    body && typeof body === 'object' && 'updates' in body
-      ? (body as { updates: unknown }).updates
-      : null;
-
-  if (!Array.isArray(updates) || updates.length === 0) {
-    return NextResponse.json({ error: 'updates array is required' }, { status: 400 });
-  }
-
-  const validated = updates.map((item) => {
-    if (!item || typeof item !== 'object') return null;
-    const id = 'id' in item ? (item as { id: unknown }).id : undefined;
-    const order = 'order' in item ? (item as { order: unknown }).order : undefined;
-    if (typeof id !== 'string' || !Number.isInteger(order)) return null;
-    return { id, order: order as number };
+  const body = await readJson(request, schema);
+  if (!body.success) return body.response;
+  const categories = await prisma.budgetCategory.findMany({
+    where: { id: { in: body.data.updates.map((item) => item.id) } },
+    select: { id: true, budgetId: true },
   });
-
-  if (validated.some((item) => item === null)) {
+  if (
+    categories.length !== body.data.updates.length ||
+    new Set(categories.map((category) => category.budgetId)).size !== 1
+  ) {
     return NextResponse.json(
-      { error: 'Each update must include a string id and integer order' },
+      { error: 'Categories must exist in the same budget' },
       { status: 400 },
     );
   }
-
-  const safeUpdates = validated.filter(
-    (item): item is { id: string; order: number } => item !== null,
+  await prisma.$transaction(
+    body.data.updates.map(({ id, order }) =>
+      prisma.budgetCategory.update({ where: { id }, data: { order } }),
+    ),
   );
-
-  try {
-    await prisma.$transaction(
-      safeUpdates.map(({ id, order }) =>
-        prisma.budgetCategory.update({ where: { id }, data: { order } }),
-      ),
-    );
-  } catch {
-    return NextResponse.json({ error: 'Failed to reorder categories' }, { status: 500 });
-  }
-
   return NextResponse.json({ success: true });
 }

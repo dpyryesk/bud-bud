@@ -13,7 +13,13 @@ export type CsvMapping = {
   sourceTagId: string | null;
 };
 
-export type SourceTag = { id: string; name: string; color: string };
+export type SourceTag = {
+  id: string;
+  name: string;
+  color: string;
+  parentId: string | null;
+  order: number;
+};
 
 export type Step = 'upload' | 'configure' | 'preview' | 'done';
 

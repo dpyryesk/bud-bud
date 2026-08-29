@@ -1,45 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { colorSchema, idSchema, nameSchema, readJson } from '@/lib/api-validation';
 import { prisma } from '@/lib/prisma';
 
-// GET /api/tags - List all tags as flat list (with children info for tree building)
-export async function GET() {
-  const tags = await prisma.tag.findMany({
-    include: {
-      children: {
-        select: { id: true },
-      },
-    },
-    orderBy: [{ order: 'asc' }, { name: 'asc' }],
-  });
+const createSchema = z
+  .object({
+    name: nameSchema,
+    color: colorSchema.default('#6B7280'),
+    parentId: idSchema.nullable().optional(),
+    isSource: z.boolean().default(false),
+  })
+  .strict();
 
-  return NextResponse.json(tags);
+export async function GET() {
+  return NextResponse.json(
+    await prisma.tag.findMany({
+      include: { children: { select: { id: true } } },
+      orderBy: [{ order: 'asc' }, { name: 'asc' }],
+    }),
+  );
 }
 
-// POST /api/tags - Create a new tag
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const { name, color, parentId, isSource } = body;
-
-  if (!name || typeof name !== 'string') {
-    return NextResponse.json({ error: 'Name is required' }, { status: 400 });
-  }
-
-  // Place new tag at the end of its sibling group
-  const maxOrderResult = await prisma.tag.aggregate({
-    where: { parentId: parentId || null },
-    _max: { order: true },
+  const body = await readJson(request, createSchema);
+  if (!body.success) return body.response;
+  const result = await prisma.$transaction(async (tx) => {
+    if (body.data.parentId) {
+      const parent = await tx.tag.findUnique({
+        where: { id: body.data.parentId },
+        select: { isSource: true },
+      });
+      if (!parent) return { kind: 'missing-parent' as const };
+      if (parent.isSource !== body.data.isSource) return { kind: 'type-mismatch' as const };
+    }
+    const maximum = await tx.tag.aggregate({
+      where: { parentId: body.data.parentId ?? null },
+      _max: { order: true },
+    });
+    return {
+      kind: 'ok' as const,
+      tag: await tx.tag.create({
+        data: {
+          name: body.data.name,
+          color: body.data.color,
+          parentId: body.data.parentId ?? null,
+          isSource: body.data.isSource,
+          order: (maximum._max.order ?? -1) + 1,
+        },
+      }),
+    };
   });
-  const order = (maxOrderResult._max.order ?? -1) + 1;
-
-  const tag = await prisma.tag.create({
-    data: {
-      name: name.trim(),
-      color: color || '#6B7280',
-      parentId: parentId || null,
-      isSource: isSource || false,
-      order,
-    },
-  });
-
-  return NextResponse.json(tag, { status: 201 });
+  if (result.kind === 'missing-parent')
+    return NextResponse.json({ error: 'Parent tag not found' }, { status: 404 });
+  if (result.kind === 'type-mismatch')
+    return NextResponse.json(
+      { error: 'Parent and child tags must have the same type' },
+      { status: 400 },
+    );
+  return NextResponse.json(result.tag, { status: 201 });
 }

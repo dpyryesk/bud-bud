@@ -1,24 +1,42 @@
-FROM node:22-alpine
+FROM node:22-alpine AS base
 WORKDIR /app
 
-# Install pnpm (version matches packageManager in package.json)
-RUN npm install -g pnpm@10.33.3
+RUN corepack enable && corepack prepare pnpm@10.33.3 --activate
 
-# Install dependencies first for better layer caching
+FROM base AS dependencies
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
-# Copy source code
-COPY . .
+FROM base AS production-dependencies
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --prod --frozen-lockfile
 
-# Build the app (runs prisma generate + next build)
+FROM base AS builder
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY . .
 RUN pnpm build
 
-# Create the data directory used for the SQLite volume
-RUN mkdir -p data
+FROM base AS migrator
+ENV NODE_ENV=production
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY package.json prisma.config.ts ./
+COPY prisma ./prisma
+COPY scripts ./scripts
+RUN mkdir -p data && chown -R node:node /app
+USER node
+CMD ["node", "scripts/migrate-database.mjs"]
 
-EXPOSE 3000
+FROM base AS runner
+ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+COPY --from=production-dependencies /app/node_modules ./node_modules
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/src/generated ./src/generated
+RUN mkdir -p data && chown -R node:node /app
+USER node
 
-ENTRYPOINT ["sh", "docker-entrypoint.sh"]
+EXPOSE 3000
+CMD ["node_modules/.bin/next", "start"]

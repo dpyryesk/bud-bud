@@ -17,6 +17,7 @@ import {
 import { TagBadge } from '@/components/tags/tag-badge';
 import { TagSelectorDropdown } from '@/components/tags/tag-selector-dropdown';
 import { Badge } from '@/components/ui/badge';
+import { MAX_REGEX_PATTERN_LENGTH } from '@/lib/regex-limits';
 
 export default function AutoTagRulesSection({ categoryTags }: { categoryTags: LeveledTag[] }) {
   const [rules, setRules] = useState<AutoTagRule[]>([]);
@@ -52,14 +53,9 @@ export default function AutoTagRulesSection({ categoryTags }: { categoryTags: Le
         setRegexError('');
         return true;
       }
-      try {
-        new RegExp(pattern);
-        setRegexError('');
-        return true;
-      } catch {
-        setRegexError('Invalid regular expression');
-        return false;
-      }
+      const valid = pattern.length <= MAX_REGEX_PATTERN_LENGTH;
+      setRegexError(valid ? '' : `Pattern cannot exceed ${MAX_REGEX_PATTERN_LENGTH} characters`);
+      return valid;
     },
     [formMatchType],
   );
@@ -77,14 +73,10 @@ export default function AutoTagRulesSection({ categoryTags }: { categoryTags: Le
       setFormMatchType(value);
       setRegexError('');
       if (value === 'regex' && formPattern) {
-        try {
-          new RegExp(formPattern);
-        } catch {
-          setRegexError('Invalid regular expression');
-        }
+        validateRegex(formPattern);
       }
     },
-    [formPattern],
+    [formPattern, validateRegex],
   );
 
   const handleCreate = useCallback(async () => {

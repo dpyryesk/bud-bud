@@ -1,32 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { z } from 'zod';
+import { Prisma } from '@/generated/prisma/client';
+import { dateOnlySchema, readJson } from '@/lib/api-validation';
 import { parseDateInputAsUtc } from '@/lib/date-utils';
+import { prisma } from '@/lib/prisma';
 
-// GET /api/budgets/:id - Return a single budget by id
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+const updateBudgetSchema = z
+  .object({
+    startDate: dateOnlySchema.optional(),
+    resetRollover: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, 'At least one field is required');
 
+async function serializeBudget(id: string) {
   const [budget, allBudgets] = await Promise.all([
     prisma.budget.findUnique({
       where: { id },
-      include: {
-        _count: { select: { categories: true, lines: true } },
-      },
+      include: { _count: { select: { categories: true, lines: true } } },
     }),
     prisma.budget.findMany({
       orderBy: { startDate: 'asc' },
       select: { id: true, startDate: true },
     }),
   ]);
-
-  if (!budget) {
-    return NextResponse.json({ error: 'Budget not found' }, { status: 404 });
-  }
-
-  const index = allBudgets.findIndex((b) => b.id === id);
-  const nextBudget = index >= 0 && index < allBudgets.length - 1 ? allBudgets[index + 1] : null;
-
-  return NextResponse.json({
+  if (!budget) return null;
+  const index = allBudgets.findIndex((candidate) => candidate.id === id);
+  return {
     id: budget.id,
     startDate: budget.startDate.toISOString(),
     resetRollover: budget.resetRollover,
@@ -34,106 +33,78 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     updatedAt: budget.updatedAt.toISOString(),
     categoryCount: budget._count.categories,
     lineCount: budget._count.lines,
-    validUntil: nextBudget ? nextBudget.startDate.toISOString() : null,
-  });
+    validUntil: allBudgets[index + 1]?.startDate.toISOString() ?? null,
+  };
 }
 
-// PUT /api/budgets/:id - Update a budget (startDate and/or resetRollover)
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const result = await serializeBudget(id);
+  return result
+    ? NextResponse.json(result)
+    : NextResponse.json({ error: 'Budget not found' }, { status: 404 });
+}
+
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const body = await request.json();
-  const { startDate, resetRollover } = body;
-
-  // Check the budget exists
-  const existing = await prisma.budget.findUnique({ where: { id } });
-  if (!existing) {
-    return NextResponse.json({ error: 'Budget not found' }, { status: 404 });
-  }
-
-  let parsedDate: Date | undefined;
-  if (startDate !== undefined) {
-    if (typeof startDate !== 'string') {
-      return NextResponse.json({ error: 'startDate must be a string' }, { status: 400 });
-    }
-    parsedDate = parseDateInputAsUtc(startDate);
-    if (isNaN(parsedDate.getTime())) {
-      return NextResponse.json({ error: 'startDate is not a valid date' }, { status: 400 });
-    }
-
-    // Check for duplicate startDate (excluding the budget being updated)
-    const duplicate = await prisma.budget.findFirst({
-      where: {
-        startDate: parsedDate,
-        id: { not: id },
-      },
-    });
-    if (duplicate) {
-      return NextResponse.json(
-        { error: 'A budget with this startDate already exists' },
-        { status: 409 },
-      );
-    }
-  }
-
-  let updatedBudget;
+  const parsed = await readJson(request, updateBudgetSchema);
+  if (!parsed.success) return parsed.response;
   try {
-    updatedBudget = await prisma.budget.update({
+    await prisma.budget.update({
       where: { id },
       data: {
-        ...(parsedDate !== undefined ? { startDate: parsedDate } : {}),
-        ...(typeof resetRollover === 'boolean' ? { resetRollover } : {}),
-      },
-      include: {
-        _count: { select: { categories: true, lines: true } },
+        ...(parsed.data.startDate && {
+          startDate: parseDateInputAsUtc(parsed.data.startDate),
+        }),
+        ...(parsed.data.resetRollover !== undefined && {
+          resetRollover: parsed.data.resetRollover,
+        }),
       },
     });
-  } catch (e) {
-    if (e && typeof e === 'object' && 'code' in e && e.code === 'P2002') {
-      return NextResponse.json(
-        { error: 'A budget with this startDate already exists' },
-        { status: 409 },
-      );
+    return NextResponse.json(await serializeBudget(id));
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        return NextResponse.json(
+          { error: 'A budget with this startDate already exists' },
+          { status: 409 },
+        );
+      }
+      if (error.code === 'P2025') {
+        return NextResponse.json({ error: 'Budget not found' }, { status: 404 });
+      }
     }
-    throw e;
+    return NextResponse.json({ error: 'Unable to update budget' }, { status: 500 });
   }
-
-  // Compute validUntil for the updated budget
-  const allBudgets = await prisma.budget.findMany({
-    orderBy: { startDate: 'asc' },
-    select: { id: true, startDate: true },
-  });
-  const index = allBudgets.findIndex((b) => b.id === id);
-  const nextBudget = index >= 0 && index < allBudgets.length - 1 ? allBudgets[index + 1] : null;
-
-  return NextResponse.json({
-    id: updatedBudget.id,
-    startDate: updatedBudget.startDate.toISOString(),
-    resetRollover: updatedBudget.resetRollover,
-    createdAt: updatedBudget.createdAt.toISOString(),
-    updatedAt: updatedBudget.updatedAt.toISOString(),
-    categoryCount: updatedBudget._count.categories,
-    lineCount: updatedBudget._count.lines,
-    validUntil: nextBudget ? nextBudget.startDate.toISOString() : null,
-  });
 }
 
-// DELETE /api/budgets/:id - Delete a budget (cascades to categories and lines)
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-
-  // Block delete if this is the only budget
-  const totalCount = await prisma.budget.count();
-  if (totalCount <= 1) {
-    return NextResponse.json({ error: 'Cannot delete the only budget' }, { status: 409 });
-  }
-
   try {
-    await prisma.budget.delete({ where: { id } });
-    return NextResponse.json({ success: true });
-  } catch {
-    return NextResponse.json({ error: 'Budget not found' }, { status: 404 });
+    await prisma.$transaction(async (tx) => {
+      const budgets = await tx.budget.findMany({ select: { id: true } });
+      if (!budgets.some((budget) => budget.id === id))
+        throw new RouteError('Budget not found', 404);
+      if (budgets.length <= 1) throw new RouteError('Cannot delete the only budget', 409);
+      await tx.budget.delete({ where: { id } });
+    });
+    return new NextResponse(null, { status: 204 });
+  } catch (error) {
+    if (error instanceof RouteError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: 'Unable to delete budget' }, { status: 500 });
+  }
+}
+
+class RouteError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
   }
 }

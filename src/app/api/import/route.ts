@@ -1,166 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkCsvRequest, importMappingSchema, parseCsvFile } from '@/lib/csv-import';
 import { prisma } from '@/lib/prisma';
-import { hashTransaction } from '@/lib/hash';
-import { normalizeTransactionName } from '@/lib/normalize';
-import { parseDateInputAsUtc } from '@/lib/date-utils';
-import Papa from 'papaparse';
-import { parse as parseDate } from 'date-fns';
 
-// POST /api/import - Upload and import CSV
 export async function POST(request: NextRequest) {
+  if (!checkCsvRequest(request)) {
+    return NextResponse.json({ error: 'CSV request is too large' }, { status: 413 });
+  }
   try {
     const formData = await request.formData();
-    const file = formData.get('file') as File | null;
-    const mappingJson = formData.get('mapping') as string | null;
-    const sourceTagId = formData.get('sourceTagId') as string | null;
-
-    if (!file || !mappingJson) {
+    const file = formData.get('file');
+    const mappingRaw = formData.get('mapping');
+    if (!(file instanceof File) || typeof mappingRaw !== 'string') {
       return NextResponse.json({ error: 'File and mapping are required' }, { status: 400 });
     }
-
-    const mapping = JSON.parse(mappingJson);
-    const csvText = await file.text();
-
-    // Parse CSV
-    const parseResult = Papa.parse<string[]>(csvText, {
-      header: false,
-      skipEmptyLines: true,
-    });
-
-    if (parseResult.errors.length > 0 && parseResult.data.length === 0) {
+    let mappingJson: unknown;
+    try {
+      mappingJson = JSON.parse(mappingRaw);
+    } catch {
+      return NextResponse.json({ error: 'Mapping must be valid JSON' }, { status: 400 });
+    }
+    const mapping = importMappingSchema.safeParse(mappingJson);
+    if (!mapping.success) {
       return NextResponse.json(
-        { error: 'CSV parsing failed', details: parseResult.errors },
+        { error: 'Invalid mapping', issues: mapping.error.issues.map((issue) => issue.message) },
+        { status: 400 },
+      );
+    }
+    const parsedRows = await parseCsvFile(file, mapping.data);
+    const validRows = parsedRows.filter((row) => !row.error && row.dateValue);
+    const tagIds = [
+      ...(mapping.data.sourceTagId ? [mapping.data.sourceTagId] : []),
+      ...Object.values(mapping.data.sourceValueTagMap),
+    ];
+    const uniqueTagIds = [...new Set(tagIds)];
+    const sourceTags = await prisma.tag.findMany({
+      where: { id: { in: uniqueTagIds }, isSource: true },
+      select: { id: true },
+    });
+    if (sourceTags.length !== uniqueTagIds.length) {
+      return NextResponse.json(
+        { error: 'Every configured source tag must exist and be a source tag' },
         { status: 400 },
       );
     }
 
-    const getColumnValue = (row: string[], column: string | null | undefined) => {
-      if (!column || column === 'none') return '';
-      const columnNumber = Number(column);
-      if (!Number.isInteger(columnNumber) || columnNumber < 1) return '';
-      return (row[columnNumber - 1] || '').trim();
-    };
-
-    const csvRows = mapping.skipFirstRow ? parseResult.data.slice(1) : parseResult.data;
-
-    let imported = 0;
-    let duplicates = 0;
-    let errors = 0;
-
-    for (const row of csvRows) {
-      try {
-        const rawName = getColumnValue(row, mapping.nameColumn);
-        const rawDate = getColumnValue(row, mapping.dateColumn);
-        const rawDebit = getColumnValue(row, mapping.debitColumn).replace(/[,$]/g, '');
-        const rawCredit = getColumnValue(row, mapping.creditColumn).replace(/[,$]/g, '');
-        const rawSource = getColumnValue(row, mapping.sourceColumn);
-
-        if (!rawName || !rawDate) {
-          errors++;
-          continue;
-        }
-
-        const debit = Math.abs(parseFloat(rawDebit) || 0);
-        const credit = Math.abs(parseFloat(rawCredit) || 0);
-
-        // Parse date with format
-        let date: Date;
-        if (mapping.dateFormat && mapping.dateFormat !== 'YYYY-MM-DD') {
-          // Convert common date format tokens to date-fns tokens
-          const fnsFormat = mapping.dateFormat
-            .replace('YYYY', 'yyyy')
-            .replace('DD', 'dd')
-            .replace('MM', 'MM');
-          const localDate = parseDate(rawDate, fnsFormat, new Date());
-          // Normalize to UTC midnight using local calendar components
-          date = new Date(
-            Date.UTC(localDate.getFullYear(), localDate.getMonth(), localDate.getDate()),
-          );
-        } else {
-          // YYYY-MM-DD strings are already UTC midnight per ECMAScript spec, but
-          // parseDateInputAsUtc uses the component approach so behaviour is explicit
-          // and immune to any future runtime changes.
-          date = parseDateInputAsUtc(rawDate);
-        }
-
-        if (isNaN(date.getTime())) {
-          errors++;
-          continue;
-        }
-
-        const csvHash = await hashTransaction({
-          date: date.toISOString().split('T')[0],
-          name: rawName,
-          debit,
-          credit,
-          source: rawSource,
-        });
-
-        const normalizedName = normalizeTransactionName(rawName);
-
-        // Try to insert, skip on duplicate hash
-        try {
-          await prisma.$transaction(async (tx) => {
-            const transaction = await tx.transaction.create({
-              data: {
-                date,
-                name: rawName,
-                normalizedName,
-                debit,
-                credit,
-                source: rawSource,
-                csvHash,
-              },
-            });
-
-            // Apply overall source tag if provided
-            if (sourceTagId) {
-              await tx.transactionTag.create({
-                data: {
-                  transactionId: transaction.id,
-                  tagId: sourceTagId,
-                },
-              });
-            }
-
-            // Apply per-value source tag if provided and different from overall tag
-            const sourceValueTagMap = mapping.sourceValueTagMap as
-              | Record<string, string>
-              | undefined;
-            if (sourceValueTagMap && rawSource && sourceValueTagMap[rawSource]) {
-              const valueTagId = sourceValueTagMap[rawSource];
-              if (valueTagId !== sourceTagId) {
-                await tx.transactionTag.create({
-                  data: {
-                    transactionId: transaction.id,
-                    tagId: valueTagId,
-                  },
-                });
-              }
-            }
-          });
-
-          imported++;
-        } catch (e: unknown) {
-          // Check for unique constraint violation (duplicate)
-          if (e && typeof e === 'object' && 'code' in e && e.code === 'P2002') {
-            duplicates++;
-          } else {
-            errors++;
-          }
-        }
-      } catch {
-        errors++;
+    const existing = new Set<string>();
+    for (let offset = 0; offset < validRows.length; offset += 500) {
+      const found = await prisma.transaction.findMany({
+        where: {
+          importKey: { in: validRows.slice(offset, offset + 500).map((row) => row.importKey) },
+        },
+        select: { importKey: true },
+      });
+      for (const transaction of found) {
+        if (transaction.importKey) existing.add(transaction.importKey);
       }
     }
+    const newRows = validRows.filter((row) => !existing.has(row.importKey));
+    const transactionRows = newRows.map((row) => ({ row, id: crypto.randomUUID() }));
+
+    await prisma.$transaction(
+      async (tx) => {
+        if (transactionRows.length) {
+          await tx.transaction.createMany({
+            data: transactionRows.map(({ id, row }) => ({
+              id,
+              date: row.dateValue!,
+              name: row.name,
+              normalizedName: row.normalizedName,
+              debit: row.debitCents,
+              credit: row.creditCents,
+              source: row.source,
+              csvHash: row.csvHash,
+              importKey: row.importKey,
+            })),
+          });
+          const transactionTags = transactionRows.flatMap(({ id, row }) => {
+            const rowTagIds = [
+              ...(mapping.data.sourceTagId ? [mapping.data.sourceTagId] : []),
+              ...(row.source && mapping.data.sourceValueTagMap[row.source]
+                ? [mapping.data.sourceValueTagMap[row.source]]
+                : []),
+            ];
+            return [...new Set(rowTagIds)].map((tagId) => ({ transactionId: id, tagId }));
+          });
+          if (transactionTags.length) await tx.transactionTag.createMany({ data: transactionTags });
+        }
+      },
+      { maxWait: 10_000, timeout: 30_000 },
+    );
 
     return NextResponse.json({
-      total: csvRows.length,
-      imported,
-      duplicates,
-      errors,
+      total: parsedRows.length,
+      imported: transactionRows.length,
+      duplicates: validRows.length - newRows.length,
+      errors: parsedRows.length - validRows.length,
     });
-  } catch (e) {
-    return NextResponse.json({ error: 'Import failed', details: String(e) }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Import failed';
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }

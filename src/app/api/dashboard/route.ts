@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { parseDateRange } from '@/lib/api-validation';
+import { fromCents } from '@/lib/money';
 
 // GET /api/dashboard - Dashboard summary stats
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const start = searchParams.get('start');
-  const end = searchParams.get('end');
-
-  if (!start || !end) {
-    return NextResponse.json({ error: 'start and end are required' }, { status: 400 });
-  }
+  const range = parseDateRange(searchParams);
+  if (!range.success) return range.response;
 
   const dateFilter = {
     date: {
-      gte: new Date(start),
-      lte: new Date(end),
+      gte: range.start,
+      lte: range.end,
     },
     archived: false,
   };
@@ -103,11 +101,20 @@ export async function GET(request: NextRequest) {
   const sourceTagBreakdown = Object.values(sourceTagTotals).sort((a, b) => b.spending - a.spending);
 
   return NextResponse.json({
-    totalIncome,
-    totalSpending,
-    net,
+    totalIncome: fromCents(totalIncome),
+    totalSpending: fromCents(totalSpending),
+    net: fromCents(net),
     count,
-    spendingByTag,
-    sourceTagTotals: sourceTagBreakdown,
+    spendingByTag: spendingByTag.map((item) => ({
+      ...item,
+      spending: fromCents(item.spending),
+      total: fromCents(item.total),
+    })),
+    sourceTagTotals: sourceTagBreakdown.map((item) => ({
+      ...item,
+      spending: fromCents(item.spending),
+      income: fromCents(item.income),
+      total: fromCents(item.total),
+    })),
   });
 }

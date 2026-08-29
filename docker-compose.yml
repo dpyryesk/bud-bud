@@ -1,11 +1,29 @@
 services:
+  migrate:
+    build:
+      context: .
+      target: migrator
+    volumes:
+      - ./data:/app/data
+    environment:
+      DATABASE_URL: 'file:./data/bud.db'
+    restart: 'no'
+
   app:
-    build: .
+    build:
+      context: .
+      target: runner
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     ports:
-      - '3000:3000'
+      - '127.0.0.1:3000:3000'
     volumes:
       # Persists the SQLite database between container restarts
       - ./data:/app/data
     environment:
       DATABASE_URL: 'file:./data/bud.db'
+      BUD_BUD_USERNAME: '${BUD_BUD_USERNAME:-}'
+      BUD_BUD_PASSWORD: '${BUD_BUD_PASSWORD:-}'
+      BUD_BUD_ALLOWED_ORIGINS: '${BUD_BUD_ALLOWED_ORIGINS:-}'
     restart: unless-stopped

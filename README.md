@@ -30,7 +30,8 @@ cd bud-bud
 docker compose up
 ```
 
-Docker builds the image, applies database migrations, and starts the server automatically.
+Docker builds the image, creates a verified database backup when upgrading, applies migrations,
+and starts the server automatically. The published port is bound to localhost by default.
 Open [http://localhost:3000](http://localhost:3000).
 
 Your data is stored in `./data/bud.db` on the host and persists between restarts.
@@ -42,8 +43,8 @@ To stop: `Ctrl+C`. To stop and remove the container: `docker compose down`.
 
 **Prerequisites:**
 
-- **[Node.js](https://nodejs.org/)** (v18 or later recommended)
-- **[pnpm](https://pnpm.io/installation)** (v8 or later recommended)
+- **[Node.js](https://nodejs.org/)** `^20.19`, `^22.12`, or `>=24`
+- **[pnpm](https://pnpm.io/installation)** v10 (Corepack recommended)
 
 ```bash
 git clone https://github.com/dpyryesk/bud-bud.git
@@ -58,6 +59,17 @@ and starts the server.
 Open [http://localhost:3000](http://localhost:3000).
 
 Your data is stored in `./data/bud.db`.
+
+Before each migration, `pnpm setup`/`pnpm db:deploy` creates a verified `data/bud-backup-*.db`
+snapshot. You can also run `pnpm db:backup` at any time. Keep these snapshots until you have
+confirmed the upgraded application and your data are healthy.
+
+### Remote access and authentication
+
+The Docker configuration only listens on `127.0.0.1`. If you intentionally expose the app on a
+network, set both `BUD_BUD_USERNAME` and a strong `BUD_BUD_PASSWORD` in `.env`, put the app behind
+HTTPS, and list any additional trusted UI origins in `BUD_BUD_ALLOWED_ORIGINS`. Leaving one of the
+two credentials blank while the other is set denies access.
 
 > **For active development** use `pnpm dev` instead. Run `pnpm db:migrate` and
 > `pnpm db:generate` once first to set up the database, then use `pnpm dev` for hot-reloading.
@@ -125,6 +137,8 @@ Tip: Start with high-level categories first, then split into finer categories la
 6. Confirm import to create transactions.
 
 Tip: Use a small sample CSV first to verify mapping behavior before importing a full statement history.
+Imports are limited to 5 MiB and 5,000 data rows. Re-importing the exact same file with the same
+mapping is idempotent; two identical-looking rows at different positions are both preserved.
 
 ### 4) Tag transactions
 

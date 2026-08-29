@@ -190,7 +190,17 @@ function IncomeSourceDialogContent({
               }}
             >
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue>
+                  {(value: string | null) =>
+                    value === 'monthly'
+                      ? 'Monthly'
+                      : value === 'biweekly'
+                        ? 'Bi-weekly'
+                        : value === 'yearly'
+                          ? 'Yearly'
+                          : 'Select period'
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="monthly">Monthly</SelectItem>
@@ -226,7 +236,17 @@ function IncomeSourceDialogContent({
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>
+                    {(value: string | null) =>
+                      value === 'monthly'
+                        ? 'Monthly'
+                        : value === 'biweekly'
+                          ? 'Bi-weekly'
+                          : value === 'yearly'
+                            ? 'Yearly'
+                            : 'Select period'
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="monthly">Monthly</SelectItem>

@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { collectDescendantTagIds } from '@/lib/tag-tree';
 import { getYearlyAmount, buildMonthList } from '@/lib/date-utils';
 import type { BudgetPeriodType } from '@/lib/date-utils';
+import { fromCents, fromComputedCents } from '@/lib/money';
+import { getNonSourceTagIds, isFullyTracked, matchingTagSetIndexes } from '@/lib/tag-allocation';
 
 /** Build a yyyy-MM key from a Date using UTC fields to avoid local-timezone drift. */
 function utcMonthKey(d: Date): string {
@@ -71,10 +73,31 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean);
+    if (directTagIds.length > 200 || new Set(directTagIds).size !== directTagIds.length) {
+      return NextResponse.json(
+        { error: 'tagIds must contain at most 200 unique ids' },
+        { status: 400 },
+      );
+    }
   } else {
     directTagIds = budgetLine.tags.map((blt) => blt.tag.id);
   }
   const expandedTagIds = collectDescendantTagIds(directTagIds, childrenMap);
+
+  const siblingLines = await prisma.budgetLine.findMany({
+    where: { budgetId: budget.id, id: { not: id } },
+    include: { tags: { select: { tagId: true } } },
+  });
+  const allTagSets = [
+    expandedTagIds,
+    ...siblingLines.map((line) =>
+      collectDescendantTagIds(
+        line.tags.map((entry) => entry.tagId),
+        childrenMap,
+      ),
+    ),
+  ];
+  const coveredTags = new Set(allTagSets.flatMap((set) => [...set]));
 
   // Load non-archived transactions from the earliest transaction to today
   const endOfToday = new Date(
@@ -92,23 +115,27 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       },
     },
     orderBy: { date: 'desc' },
+    take: 50_001,
   });
+  if (transactions.length > 50_000) {
+    return NextResponse.json({ error: 'Too many transactions for analysis' }, { status: 413 });
+  }
 
   // Group transactions by month, summing (debit - credit) for matching non-source tags
   const monthSpendingMap = new Map<string, { spending: number; count: number }>();
   const relevantTransactions: typeof transactions = [];
 
   for (const tx of transactions) {
-    const nonSourceTagIds = tx.tags.filter((tt) => !tt.tag.isSource).map((tt) => tt.tag.id);
-
-    if (nonSourceTagIds.length === 0) continue;
-    if (!nonSourceTagIds.some((tid) => expandedTagIds.has(tid))) continue;
+    const nonSourceTagIds = getNonSourceTagIds(tx.tags.map((entry) => entry.tag));
+    if (!isFullyTracked(nonSourceTagIds, coveredTags)) continue;
+    const matches = matchingTagSetIndexes(nonSourceTagIds, allTagSets);
+    if (!matches.includes(0)) continue;
 
     relevantTransactions.push(tx);
 
     const monthKey = utcMonthKey(new Date(tx.date));
     const existing = monthSpendingMap.get(monthKey) ?? { spending: 0, count: 0 };
-    const net = tx.debit - tx.credit;
+    const net = (tx.debit - tx.credit) / matches.length;
     monthSpendingMap.set(monthKey, {
       spending: existing.spending + net,
       count: existing.count + 1,
@@ -131,7 +158,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const entry = monthSpendingMap.get(key);
     return {
       month: key,
-      spending: entry ? Math.max(0, entry.spending) : 0,
+      spending: entry ? fromComputedCents(Math.max(0, entry.spending)) : 0,
       transactionCount: entry?.count ?? 0,
     };
   });
@@ -174,10 +201,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   );
 
   // All OTHER budget lines yearly total (for context)
-  const otherLines = await prisma.budgetLine.findMany({
-    where: { budgetId: budget.id, id: { not: id } },
-  });
-  const totalYearlyBudget = otherLines.reduce(
+  const totalYearlyBudget = siblingLines.reduce(
     (sum, bl) => sum + getYearlyAmount(bl.amount, bl.period as BudgetPeriodType),
     0,
   );
@@ -187,7 +211,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       id: budgetLine.id,
       name: budgetLine.name,
       period: budgetLine.period,
-      amount: budgetLine.amount,
+      amount: fromCents(budgetLine.amount),
       rollover: budgetLine.rollover,
       order: budgetLine.order,
       categoryId: budgetLine.categoryId,
@@ -211,15 +235,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       highestMonth,
       lowestNonZeroMonth,
     },
-    totalYearlyIncome,
-    totalYearlyBudget,
+    totalYearlyIncome: fromComputedCents(totalYearlyIncome),
+    totalYearlyBudget: fromComputedCents(totalYearlyBudget),
     transactions: relevantTransactions.map((tx) => ({
       id: tx.id,
       date: tx.date.toISOString(),
       name: tx.name,
       normalizedName: tx.normalizedName,
-      debit: tx.debit,
-      credit: tx.credit,
+      debit: fromCents(tx.debit),
+      credit: fromCents(tx.credit),
       source: tx.source,
       notes: tx.notes,
       archived: tx.archived,

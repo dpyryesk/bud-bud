@@ -58,6 +58,8 @@ export type BudgetCategory = {
 
 export type BudgetLineWithTags = {
   id: string;
+  /** Stable display identity across copied budget versions. */
+  identityKey?: string;
   name: string;
   period: BudgetPeriodType;
   amount: number;

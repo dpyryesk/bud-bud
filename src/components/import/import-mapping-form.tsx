@@ -9,6 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DATE_FORMATS, type SourceTag } from '@/components/import/constants';
 
+const columnLabel = (value: string | null) =>
+  !value || value === '_none' ? 'None' : `Column ${value}`;
+
 interface ImportMappingFormProps {
   csvHeaders: string[];
   mappingName: string;
@@ -85,7 +88,9 @@ export default function ImportMappingForm({
             }}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select column..." />
+              <SelectValue>
+                {(value: string | null) => (value ? columnLabel(value) : 'Select column...')}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {csvHeaders.map((column) => (
@@ -106,7 +111,11 @@ export default function ImportMappingForm({
             }}
           >
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue>
+                {(value: string | null) =>
+                  DATE_FORMATS.find((format) => format.value === value)?.label ?? 'Select format...'
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {DATE_FORMATS.map((f) => (
@@ -129,7 +138,9 @@ export default function ImportMappingForm({
             }}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select column..." />
+              <SelectValue>
+                {(value: string | null) => (value ? columnLabel(value) : 'Select column...')}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {csvHeaders.map((column) => (
@@ -152,7 +163,9 @@ export default function ImportMappingForm({
             }}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select column..." />
+              <SelectValue>
+                {(value: string | null) => (value ? columnLabel(value) : 'Select column...')}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {csvHeaders.map((column) => (
@@ -175,7 +188,9 @@ export default function ImportMappingForm({
             }}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select column..." />
+              <SelectValue>
+                {(value: string | null) => (value ? columnLabel(value) : 'Select column...')}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {csvHeaders.map((column) => (
@@ -197,7 +212,7 @@ export default function ImportMappingForm({
             }}
           >
             <SelectTrigger>
-              <SelectValue placeholder="None" />
+              <SelectValue>{columnLabel}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="_none">None</SelectItem>

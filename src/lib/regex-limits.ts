@@ -1,0 +1,1 @@
+export const MAX_REGEX_PATTERN_LENGTH = 200;

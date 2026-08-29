@@ -24,6 +24,7 @@ import {
 import { TagBadge } from '@/components/tags/tag-badge';
 import { TagSelectorDropdown } from '@/components/tags/tag-selector-dropdown';
 import type { TransactionWithTags } from '@/types';
+import { MAX_REGEX_PATTERN_LENGTH } from '@/lib/regex-limits';
 import type { TagOptionWithLevel } from './constants';
 
 type MatchType = 'exact' | 'regex';
@@ -73,12 +74,9 @@ export function AutoTagRuleSheet({
   const regexError = useMemo(() => {
     if (!pattern.trim()) return '';
     if (matchType === 'regex') {
-      try {
-        new RegExp(pattern, 'i');
-        return '';
-      } catch {
-        return 'Invalid regex pattern';
-      }
+      return pattern.length <= MAX_REGEX_PATTERN_LENGTH
+        ? ''
+        : `Pattern cannot exceed ${MAX_REGEX_PATTERN_LENGTH} characters`;
     }
 
     return '';
@@ -94,10 +92,9 @@ export function AutoTagRuleSheet({
         };
       }
 
-      const regex = new RegExp(pattern, 'i');
-      const match = regex.exec(testValue);
-      if (!match) return { matched: false as const, matchText: '' };
-      return { matched: true as const, matchText: match[0] ?? '' };
+      // Regex execution is intentionally server-only so an entered pattern can never
+      // block the browser's main thread. The debounced preview below supplies results.
+      return null;
     } catch {
       return null;
     }

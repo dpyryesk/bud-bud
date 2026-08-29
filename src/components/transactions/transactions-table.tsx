@@ -147,58 +147,62 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
   };
 
   // ---- Fetch transactions ----
-  const fetchTransactions = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        // Use date-only strings so the server always receives UTC midnight boundaries,
-        // matching how transaction dates are stored (UTC midnight).
-        start: format(period.start, 'yyyy-MM-dd'),
-        end: format(period.end, 'yyyy-MM-dd'),
-        page: effectivePage.toString(),
-        limit: '50',
-      });
-      if (debouncedSearch) params.set('search', debouncedSearch);
-      if (untaggedOnly) params.set('untaggedOnly', 'true');
-      // Tag filter: only apply if no tag filter comes from extraParams
-      if (filterTagIds.length > 0 && !extraParams?.tagId && !extraParams?.tagIds) {
-        params.set('tagIds', filterTagIds.join(','));
-      }
-      if (debouncedMinAmount) params.set('minAmount', debouncedMinAmount);
-      if (debouncedMaxAmount) params.set('maxAmount', debouncedMaxAmount);
-      if (extraParams) {
-        for (const [k, v] of Object.entries(extraParams)) {
-          params.set(k, v);
+  const fetchTransactions = useCallback(
+    async (signal?: AbortSignal) => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({
+          // Use date-only strings so the server always receives UTC midnight boundaries,
+          // matching how transaction dates are stored (UTC midnight).
+          start: format(period.start, 'yyyy-MM-dd'),
+          end: format(period.end, 'yyyy-MM-dd'),
+          page: effectivePage.toString(),
+          limit: '50',
+        });
+        if (debouncedSearch) params.set('search', debouncedSearch);
+        if (untaggedOnly) params.set('untaggedOnly', 'true');
+        // Tag filter: only apply if no tag filter comes from extraParams
+        if (filterTagIds.length > 0 && !extraParams?.tagId && !extraParams?.tagIds) {
+          params.set('tagIds', filterTagIds.join(','));
         }
-      }
-      const res = await fetch(`/api/transactions?${params}`);
-      if (!res.ok) {
+        if (debouncedMinAmount) params.set('minAmount', debouncedMinAmount);
+        if (debouncedMaxAmount) params.set('maxAmount', debouncedMaxAmount);
+        if (extraParams) {
+          for (const [k, v] of Object.entries(extraParams)) {
+            params.set(k, v);
+          }
+        }
+        const res = await fetch(`/api/transactions?${params}`, { signal });
+        if (!res.ok) {
+          setTransactions([]);
+          setTotal(0);
+          setTotalPages(1);
+          return;
+        }
+        const data = await res.json();
+        setTransactions(data.data ?? []);
+        setTotal(data.total ?? 0);
+        setTotalPages(data.totalPages ?? 1);
+      } catch {
+        if (signal?.aborted) return;
         setTransactions([]);
         setTotal(0);
         setTotalPages(1);
-        return;
+      } finally {
+        if (!signal?.aborted) setLoading(false);
       }
-      const data = await res.json();
-      setTransactions(data.data ?? []);
-      setTotal(data.total ?? 0);
-      setTotalPages(data.totalPages ?? 1);
-    } catch {
-      setTransactions([]);
-      setTotal(0);
-      setTotalPages(1);
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    period,
-    effectivePage,
-    debouncedSearch,
-    untaggedOnly,
-    filterTagIds,
-    debouncedMinAmount,
-    debouncedMaxAmount,
-    extraParams,
-  ]);
+    },
+    [
+      period,
+      effectivePage,
+      debouncedSearch,
+      untaggedOnly,
+      filterTagIds,
+      debouncedMinAmount,
+      debouncedMaxAmount,
+      extraParams,
+    ],
+  );
 
   const fetchTags = useCallback(async () => {
     try {
@@ -215,8 +219,12 @@ export function TransactionsTable({ extraParams }: TransactionsTableProps) {
   }, []);
 
   useEffect(() => {
-    const id = setTimeout(() => void fetchTransactions(), 0);
-    return () => clearTimeout(id);
+    const controller = new AbortController();
+    const timer = setTimeout(() => void fetchTransactions(controller.signal), 0);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [fetchTransactions]);
 
   useEffect(() => {

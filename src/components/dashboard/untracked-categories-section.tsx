@@ -64,34 +64,39 @@ export function UntrackedCategoriesSection({
   const [panelCategory, setPanelCategory] = useState<UntrackedCategoryWithSpending | null>(null);
   const [showingUncategorized, setShowingUncategorized] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        start: format(period.start, 'yyyy-MM-dd'),
-        end: format(period.end, 'yyyy-MM-dd'),
-      });
-      if (budgetId) {
-        params.set('budgetId', budgetId);
+  const fetchData = useCallback(
+    async (signal?: AbortSignal) => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({
+          start: format(period.start, 'yyyy-MM-dd'),
+          end: format(period.end, 'yyyy-MM-dd'),
+        });
+        if (budgetId) {
+          params.set('budgetId', budgetId);
+        }
+        const res = await fetch(`/api/untracked-categories?${params}`, { signal });
+        if (res.ok) {
+          const data = (await res.json()) as UntrackedCategoriesResponse;
+          setCategories(data.categories);
+          setTotalTrulyUncategorized(data.totalTrulyUncategorized);
+          setTrulyUncategorizedTransactions(data.trulyUncategorizedTransactions);
+          onDataChange?.(data.categories, data.totalTrulyUncategorized);
+        }
+      } finally {
+        if (!signal?.aborted) setLoading(false);
       }
-      const res = await fetch(`/api/untracked-categories?${params}`);
-      if (res.ok) {
-        const data = (await res.json()) as UntrackedCategoriesResponse;
-        setCategories(data.categories);
-        setTotalTrulyUncategorized(data.totalTrulyUncategorized);
-        setTrulyUncategorizedTransactions(data.trulyUncategorizedTransactions);
-        onDataChange?.(data.categories, data.totalTrulyUncategorized);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [budgetId, period, onDataChange]);
+    },
+    [budgetId, period, onDataChange],
+  );
 
   useEffect(() => {
-    const id = setTimeout(() => {
-      void fetchData();
-    }, 0);
-    return () => clearTimeout(id);
+    const controller = new AbortController();
+    const timer = setTimeout(() => void fetchData(controller.signal), 0);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [fetchData]);
 
   const handleSuccess = async () => {

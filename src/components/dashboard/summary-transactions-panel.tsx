@@ -43,9 +43,9 @@ function buildParams(cardType: SummaryCardType, period: TimePeriod): URLSearchPa
   const startStr = dateFnsFormat(period.start, 'yyyy-MM-dd');
   const endStr = dateFnsFormat(period.end, 'yyyy-MM-dd');
   const params = new URLSearchParams({
-    start: `${startStr}T00:00:00.000Z`,
-    end: `${endStr}T23:59:59.999Z`,
-    nolimit: 'true',
+    start: startStr,
+    end: endStr,
+    limit: '200',
   });
   switch (cardType) {
     case 'total-spending':

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -20,6 +20,9 @@ export function ArchivedTransactionsTable() {
   const [transactions, setTransactions] = useState<TransactionWithTags[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -27,20 +30,29 @@ export function ArchivedTransactionsTable() {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    fetch('/api/transactions?archived=true&nolimit=true', { signal: controller.signal })
-      .then((res) => res.json())
-      .then((data: { data?: TransactionWithTags[] }) => {
-        setTransactions(data.data ?? []);
-        setLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (err instanceof Error && err.name !== 'AbortError') setLoading(false);
-      });
+    const params = new URLSearchParams({ archived: 'true', page: String(page), limit: '50' });
+    if (search.trim()) params.set('search', search.trim());
+    const timer = setTimeout(
+      () =>
+        fetch(`/api/transactions?${params}`, { signal: controller.signal })
+          .then((res) => res.json())
+          .then((data: { data?: TransactionWithTags[]; total?: number; totalPages?: number }) => {
+            setTransactions(data.data ?? []);
+            setTotal(data.total ?? 0);
+            setTotalPages(data.totalPages ?? 1);
+            setLoading(false);
+          })
+          .catch((err: unknown) => {
+            if (err instanceof Error && err.name !== 'AbortError') setLoading(false);
+          }),
+      200,
+    );
 
     return () => {
       controller.abort();
+      clearTimeout(timer);
     };
-  }, []);
+  }, [page, search]);
 
   const handleRestore = useCallback(async (id: string) => {
     const res = await fetch(`/api/transactions/${id}`, {
@@ -52,25 +64,21 @@ export function ArchivedTransactionsTable() {
     setTransactions((prev) => prev.filter((tx) => tx.id !== id));
   }, []);
 
-  const filtered = search.trim()
-    ? transactions.filter(
-        (tx) =>
-          tx.name.toLowerCase().includes(search.toLowerCase()) ||
-          (tx.source ?? '').toLowerCase().includes(search.toLowerCase()),
-      )
-    : transactions;
-
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <Input
           placeholder="Search archived…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+            setLoading(true);
+          }}
           className="max-w-xs"
         />
         <span className="text-muted-foreground text-sm">
-          {loading ? '' : `${filtered.length} transaction${filtered.length !== 1 ? 's' : ''}`}
+          {loading ? '' : `${total} transaction${total !== 1 ? 's' : ''}`}
         </span>
       </div>
 
@@ -93,16 +101,16 @@ export function ArchivedTransactionsTable() {
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </TableCell>
               </TableRow>
-            ) : filtered.length === 0 ? (
+            ) : transactions.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
-                  {transactions.length === 0
-                    ? 'No archived transactions.'
-                    : 'No transactions match the search.'}
+                  {search.trim()
+                    ? 'No transactions match the search.'
+                    : 'No archived transactions.'}
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((tx) => {
+              transactions.map((tx) => {
                 const nonSourceTags = tx.tags.filter((t) => !t.isSource);
                 return (
                   <TableRow key={tx.id}>
@@ -151,6 +159,29 @@ export function ArchivedTransactionsTable() {
           </TableBody>
         </Table>
       </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => setPage((value) => value - 1)}
+          >
+            <ChevronLeft className="h-4 w-4" /> Previous
+          </Button>
+          <span className="text-muted-foreground text-sm">
+            Page {page} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage((value) => value + 1)}
+          >
+            Next <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

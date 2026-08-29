@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { format, startOfYear, endOfYear } from 'date-fns';
 import Link from 'next/link';
 import { AlertCircle } from 'lucide-react';
+import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { useTimePeriod } from '@/hooks/use-time-period';
 import { getYearlyAmount } from '@/lib/date-utils';
 import { IncomeSourcesCard } from '@/components/dashboard/income-sources-card';
@@ -14,7 +15,6 @@ import {
   SummaryTransactionsPanel,
   type SummaryCardType,
 } from '@/components/dashboard/summary-transactions-panel';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import type {
   BudgetSummaryResponse,
   Budget,
@@ -25,56 +25,6 @@ import type {
   IncomeSource,
   TimePeriod,
 } from '@/types';
-
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6" aria-busy="true" aria-label="Loading dashboard…">
-      {/* Budget cards skeleton */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
-        {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-          <Card key={i}>
-            <CardContent className="pt-6">
-              <div className="bg-muted mb-2 h-4 w-28 animate-pulse rounded" />
-              <div className="bg-muted h-7 w-20 animate-pulse rounded" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      {/* Income card skeleton */}
-      <Card>
-        <CardHeader>
-          <div className="bg-muted h-5 w-36 animate-pulse rounded" />
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {[1, 2].map((i) => (
-            <div key={i} className="flex gap-4">
-              <div className="bg-muted h-4 w-32 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-20 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-16 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-24 animate-pulse rounded" />
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-      {/* Expenses table skeleton */}
-      <Card>
-        <CardHeader>
-          <div className="bg-muted h-5 w-40 animate-pulse rounded" />
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex gap-4">
-              <div className="bg-muted h-4 w-28 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-16 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-16 animate-pulse rounded" />
-              <div className="bg-muted h-4 w-20 animate-pulse rounded" />
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 export default function DashboardPage() {
   const { period } = useTimePeriod();
@@ -171,74 +121,82 @@ export default function DashboardPage() {
 
   // ---- Data fetching ----
 
-  const fetchYearlySummary = useCallback(async () => {
-    setLoading(true);
-    setFetchError(null);
-    try {
-      const params = new URLSearchParams({
-        start: format(yearPeriod.start, 'yyyy-MM-dd'),
-        end: format(yearPeriod.end, 'yyyy-MM-dd'),
-      });
-      const res = await fetch(`/api/budget/summary?${params}`);
-      if (!res.ok) {
+  const fetchYearlySummary = useCallback(
+    async (signal: AbortSignal) => {
+      setLoading(true);
+      setFetchError(null);
+      try {
+        const params = new URLSearchParams({
+          start: format(yearPeriod.start, 'yyyy-MM-dd'),
+          end: format(yearPeriod.end, 'yyyy-MM-dd'),
+        });
+        const res = await fetch(`/api/budget/summary?${params}`, { signal });
+        if (!res.ok) {
+          setYearSummaryLines([]);
+          setActiveBudget(null);
+          setYearTotalIncome(0);
+          setYearTotalDebits(0);
+          if (res.status !== 404) {
+            setFetchError(`Failed to load budget data (${res.status})`);
+          }
+          return;
+        }
+        const data = (await res.json()) as BudgetSummaryResponse;
+        setActiveBudget(data.activeBudget);
+        setYearSummaryLines(data.lines ?? []);
+        setYearTotalIncome(data.totalIncome ?? 0);
+        setYearTotalDebits(data.totalDebits ?? 0);
+      } catch {
+        if (signal.aborted) return;
         setYearSummaryLines([]);
         setActiveBudget(null);
-        setYearTotalIncome(0);
-        setYearTotalDebits(0);
-        if (res.status !== 404) {
-          setFetchError(`Failed to load budget data (${res.status})`);
-        }
-        return;
+        setFetchError('Unable to load dashboard data. Please try again.');
+      } finally {
+        if (!signal.aborted) setLoading(false);
       }
-      const data = (await res.json()) as BudgetSummaryResponse;
-      setActiveBudget(data.activeBudget);
-      setYearSummaryLines(data.lines ?? []);
-      setYearTotalIncome(data.totalIncome ?? 0);
-      setYearTotalDebits(data.totalDebits ?? 0);
-    } catch {
-      setYearSummaryLines([]);
-      setActiveBudget(null);
-      setFetchError('Unable to load dashboard data. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }, [yearPeriod]);
+    },
+    [yearPeriod],
+  );
 
-  const fetchPeriodSummary = useCallback(async () => {
-    try {
-      const params = new URLSearchParams({
-        start: format(period.start, 'yyyy-MM-dd'),
-        end: format(period.end, 'yyyy-MM-dd'),
-      });
-      const res = await fetch(`/api/budget/summary?${params}`);
-      if (!res.ok) {
+  const fetchPeriodSummary = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        const params = new URLSearchParams({
+          start: format(period.start, 'yyyy-MM-dd'),
+          end: format(period.end, 'yyyy-MM-dd'),
+        });
+        const res = await fetch(`/api/budget/summary?${params}`, { signal });
+        if (!res.ok) {
+          setPeriodActiveBudget(null);
+          setPeriodSummaryLines([]);
+          setPeriodTotalIncome(0);
+          setPeriodTotalDebits(0);
+          return;
+        }
+        const data = (await res.json()) as BudgetSummaryResponse;
+        setPeriodActiveBudget(data.activeBudget);
+        setPeriodSummaryLines(data.lines ?? []);
+        setPeriodTotalIncome(data.totalIncome ?? 0);
+        setPeriodTotalDebits(data.totalDebits ?? 0);
+      } catch {
+        if (signal.aborted) return;
         setPeriodActiveBudget(null);
         setPeriodSummaryLines([]);
         setPeriodTotalIncome(0);
         setPeriodTotalDebits(0);
-        return;
       }
-      const data = (await res.json()) as BudgetSummaryResponse;
-      setPeriodActiveBudget(data.activeBudget);
-      setPeriodSummaryLines(data.lines ?? []);
-      setPeriodTotalIncome(data.totalIncome ?? 0);
-      setPeriodTotalDebits(data.totalDebits ?? 0);
-    } catch {
-      setPeriodActiveBudget(null);
-      setPeriodSummaryLines([]);
-      setPeriodTotalIncome(0);
-      setPeriodTotalDebits(0);
-    }
-  }, [period]);
+    },
+    [period],
+  );
 
   const fetchUntracked = useCallback(
-    async (start: Date, end: Date, setter: (v: number) => void) => {
+    async (start: Date, end: Date, setter: (v: number) => void, signal: AbortSignal) => {
       try {
         const params = new URLSearchParams({
           start: format(start, 'yyyy-MM-dd'),
           end: format(end, 'yyyy-MM-dd'),
         });
-        const res = await fetch(`/api/budget/untracked?${params}`);
+        const res = await fetch(`/api/budget/untracked?${params}`, { signal });
         if (!res.ok) {
           setter(0);
           return;
@@ -246,15 +204,16 @@ export default function DashboardPage() {
         const data: { totalUntracked: number } = await res.json();
         setter(data.totalUntracked);
       } catch {
+        if (signal.aborted) return;
         setter(0);
       }
     },
     [],
   );
 
-  const fetchIncomeSources = useCallback(async (budgetId: string) => {
+  const fetchIncomeSources = useCallback(async (budgetId: string, signal: AbortSignal) => {
     try {
-      const res = await fetch(`/api/income-sources?budgetId=${budgetId}`);
+      const res = await fetch(`/api/income-sources?budgetId=${budgetId}`, { signal });
       if (res.ok) {
         setIncomeSources((await res.json()) as IncomeSource[]);
       }
@@ -263,93 +222,133 @@ export default function DashboardPage() {
     }
   }, []);
 
-  const fetchMonthlyTrend = useCallback(async () => {
-    try {
-      const year = yearPeriod.start.getFullYear();
-      const res = await fetch(`/api/dashboard/monthly-trend?year=${year}`);
-      if (res.ok) {
-        setMonthlyTrend((await res.json()) as MonthlyTrendPoint[]);
+  const fetchMonthlyTrend = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        const year = yearPeriod.start.getFullYear();
+        const res = await fetch(`/api/dashboard/monthly-trend?year=${year}`, { signal });
+        if (res.ok) {
+          setMonthlyTrend((await res.json()) as MonthlyTrendPoint[]);
+        }
+      } catch {
+        // non-critical — charts just won't display trend
       }
-    } catch {
-      // non-critical — charts just won't display trend
-    }
-  }, [yearPeriod]);
+    },
+    [yearPeriod],
+  );
 
-  const fetchDashboardSummary = useCallback(async () => {
-    try {
-      const params = new URLSearchParams({
-        start: format(yearPeriod.start, 'yyyy-MM-dd'),
-        end: format(yearPeriod.end, 'yyyy-MM-dd'),
-      });
-      const res = await fetch(`/api/dashboard?${params}`);
-      if (!res.ok) {
+  const fetchDashboardSummary = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        const params = new URLSearchParams({
+          start: format(yearPeriod.start, 'yyyy-MM-dd'),
+          end: format(yearPeriod.end, 'yyyy-MM-dd'),
+        });
+        const res = await fetch(`/api/dashboard?${params}`, { signal });
+        if (!res.ok) {
+          setSpendingByTag([]);
+          setSourceTagTotals([]);
+          return;
+        }
+        const data = (await res.json()) as DashboardSummaryResponse;
+        setSpendingByTag(data.spendingByTag ?? []);
+        setSourceTagTotals(data.sourceTagTotals ?? []);
+      } catch {
+        if (signal.aborted) return;
         setSpendingByTag([]);
         setSourceTagTotals([]);
-        return;
       }
-      const data = (await res.json()) as DashboardSummaryResponse;
-      setSpendingByTag(data.spendingByTag ?? []);
-      setSourceTagTotals(data.sourceTagTotals ?? []);
-    } catch {
-      setSpendingByTag([]);
-      setSourceTagTotals([]);
-    }
-  }, [yearPeriod]);
+    },
+    [yearPeriod],
+  );
 
   useEffect(() => {
-    const id = setTimeout(() => {
-      void fetchYearlySummary();
-    }, 0);
-    return () => clearTimeout(id);
+    const controller = new AbortController();
+    const timer = setTimeout(() => void fetchYearlySummary(controller.signal), 0);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [fetchYearlySummary]);
 
   useEffect(() => {
-    const id = setTimeout(() => {
-      void fetchPeriodSummary();
-    }, 0);
-    return () => clearTimeout(id);
+    const controller = new AbortController();
+    const timer = setTimeout(() => void fetchPeriodSummary(controller.signal), 0);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [fetchPeriodSummary]);
 
   useEffect(() => {
-    const id = setTimeout(() => {
-      void fetchUntracked(yearPeriod.start, yearPeriod.end, setYearTotalUntracked);
-    }, 0);
-    return () => clearTimeout(id);
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () =>
+        void fetchUntracked(
+          yearPeriod.start,
+          yearPeriod.end,
+          setYearTotalUntracked,
+          controller.signal,
+        ),
+      0,
+    );
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [fetchUntracked, yearPeriod]);
 
   useEffect(() => {
-    const id = setTimeout(() => {
-      void fetchUntracked(period.start, period.end, setPeriodTotalUntracked);
-    }, 0);
-    return () => clearTimeout(id);
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () =>
+        void fetchUntracked(period.start, period.end, setPeriodTotalUntracked, controller.signal),
+      0,
+    );
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [fetchUntracked, period]);
 
   useEffect(() => {
-    const id = setTimeout(() => {
-      // Use the budget applicable to the selected period, not the yearly budget,
-      // so the income sources always match the currently selected date.
-      const budgetForPeriod = periodActiveBudget ?? activeBudget;
-      if (!budgetForPeriod) {
-        setIncomeSources([]);
-        return;
-      }
-      void fetchIncomeSources(budgetForPeriod.id);
-    }, 0);
-    return () => clearTimeout(id);
+    const controller = new AbortController();
+    // Use the budget applicable to the selected period, not the yearly budget,
+    // so the income sources always match the currently selected date.
+    const budgetForPeriod = periodActiveBudget ?? activeBudget;
+    if (!budgetForPeriod) {
+      const timer = setTimeout(() => setIncomeSources([]), 0);
+      return () => {
+        clearTimeout(timer);
+        controller.abort();
+      };
+    }
+    const timer = setTimeout(
+      () => void fetchIncomeSources(budgetForPeriod.id, controller.signal),
+      0,
+    );
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [periodActiveBudget, activeBudget, fetchIncomeSources]);
 
   useEffect(() => {
-    const id = setTimeout(() => {
-      void fetchMonthlyTrend();
-    }, 0);
-    return () => clearTimeout(id);
+    const controller = new AbortController();
+    const timer = setTimeout(() => void fetchMonthlyTrend(controller.signal), 0);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [fetchMonthlyTrend]);
 
   useEffect(() => {
-    const id = setTimeout(() => {
-      void fetchDashboardSummary();
-    }, 0);
-    return () => clearTimeout(id);
+    const controller = new AbortController();
+    const timer = setTimeout(() => void fetchDashboardSummary(controller.signal), 0);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [fetchDashboardSummary]);
 
   // ---- Handlers ----

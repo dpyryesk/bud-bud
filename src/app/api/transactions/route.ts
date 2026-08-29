@@ -1,235 +1,160 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import type { Prisma } from '@/generated/prisma/client';
+import { transactionWithTagsFromCents } from '@/lib/api-formatters';
+import { dateOnlySchema, moneyInputSchema } from '@/lib/api-validation';
+import {
+  buildChildrenMap,
+  buildCoveredTagsByBudget,
+  findApplicableBudget,
+} from '@/lib/budget-coverage';
+import { toCents } from '@/lib/money';
 import { prisma } from '@/lib/prisma';
-import { collectDescendantTagIds } from '@/lib/tag-tree';
+import { getNonSourceTagIds, isFullyTracked } from '@/lib/tag-allocation';
 
-type RawTransaction = Awaited<ReturnType<typeof fetchAllMatching>>[number];
-
-async function fetchAllMatching(where: Record<string, unknown>) {
-  return prisma.transaction.findMany({
-    where,
-    include: {
-      tags: {
-        include: {
-          tag: { select: { id: true, name: true, color: true, isSource: true } },
-        },
-      },
-    },
-    orderBy: { date: 'desc' },
+const querySchema = z
+  .object({
+    start: dateOnlySchema.optional(),
+    end: dateOnlySchema.optional(),
+    page: z.coerce.number().int().min(1).max(1_000_000).default(1),
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+    tagId: z.string().trim().min(1).max(128).optional(),
+    tagIds: z.string().max(10_000).optional(),
+    untaggedOnly: z.enum(['true', 'false']).optional(),
+    unbudgeted: z.enum(['true', 'false']).optional(),
+    budgeted: z.enum(['true', 'false']).optional(),
+    type: z.enum(['debit', 'credit']).optional(),
+    search: z.string().trim().max(200).optional(),
+    minAmount: moneyInputSchema.optional(),
+    maxAmount: moneyInputSchema.optional(),
+    archived: z.enum(['true', 'false']).optional(),
+  })
+  .superRefine((value, context) => {
+    if ((value.start == null) !== (value.end == null)) {
+      context.addIssue({ code: 'custom', message: 'start and end must be supplied together' });
+    }
+    if (value.start && value.end && value.start > value.end) {
+      context.addIssue({ code: 'custom', message: 'start must be on or before end' });
+    }
+    if (value.budgeted === 'true' && value.unbudgeted === 'true') {
+      context.addIssue({ code: 'custom', message: 'budgeted and unbudgeted cannot both be true' });
+    }
+    if (
+      value.minAmount !== undefined &&
+      value.maxAmount !== undefined &&
+      value.minAmount > value.maxAmount
+    ) {
+      context.addIssue({ code: 'custom', message: 'minAmount cannot exceed maxAmount' });
+    }
   });
-}
 
-function formatTransaction(t: RawTransaction) {
-  return {
-    id: t.id,
-    date: t.date.toISOString(),
-    name: t.name,
-    normalizedName: t.normalizedName,
-    debit: t.debit,
-    credit: t.credit,
-    source: t.source,
-    notes: t.notes,
-    archived: t.archived,
-    tags: t.tags.map((tt) => tt.tag),
-  };
-}
+const transactionInclude = {
+  tags: {
+    include: { tag: { select: { id: true, name: true, color: true, isSource: true } } },
+  },
+} satisfies Prisma.TransactionInclude;
 
-// GET /api/transactions - List transactions with period filter, search, and pagination
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const start = searchParams.get('start');
-  const end = searchParams.get('end');
-  const rawPage = Number.parseInt(searchParams.get('page') || '1', 10);
-  const rawLimit = Number.parseInt(searchParams.get('limit') || '50', 10);
-  const nolimit = searchParams.get('nolimit') === 'true';
-  const tagId = searchParams.get('tagId');
-  const tagIdsParam = searchParams.get('tagIds');
-  const untaggedOnly = searchParams.get('untaggedOnly') === 'true';
-  const unbudgeted = searchParams.get('unbudgeted') === 'true';
-  const budgeted = searchParams.get('budgeted') === 'true';
-  const type = searchParams.get('type'); // 'debit' | 'credit'
-  const search = searchParams.get('search')?.trim() ?? '';
-  const minAmountVal = parseFloat(searchParams.get('minAmount') ?? '');
-  const maxAmountVal = parseFloat(searchParams.get('maxAmount') ?? '');
-  // archived=true → show only archived; default → show only non-archived
-  const archivedParam = searchParams.get('archived');
-  const archivedFilter = archivedParam === 'true' ? true : false;
-
-  if (!Number.isInteger(rawPage) || !Number.isInteger(rawLimit)) {
-    return NextResponse.json({ error: 'page and limit must be integers' }, { status: 400 });
-  }
-
-  const page = Math.max(1, rawPage);
-  const limit = nolimit ? Number.MAX_SAFE_INTEGER : Math.min(200, Math.max(1, rawLimit));
-
-  const where: Record<string, unknown> = { archived: archivedFilter };
-
-  if (start && end) {
-    where.date = {
-      gte: new Date(start),
-      lte: new Date(end),
-    };
-  }
-
-  if (search) {
-    where.name = { contains: search };
-  }
-
-  if (tagId) {
-    where.tags = {
-      some: { tagId },
-    };
-  } else if (tagIdsParam) {
-    const tagIds = tagIdsParam
-      .split(',')
-      .map((id) => id.trim())
-      .filter(Boolean);
-    if (tagIds.length > 0) {
-      where.tags = {
-        some: { tagId: { in: tagIds } },
-      };
-    }
-  }
-
-  if (untaggedOnly) {
-    where.tags = {
-      none: {
-        tag: { isSource: false },
-      },
-    };
-  }
-
-  // ---- Transaction type filter (debit-only or credit-only) ----
-  if (type === 'debit') {
-    where.debit = { gt: 0 };
-  } else if (type === 'credit') {
-    where.credit = { gt: 0 };
-  }
-
-  // ---- Amount range filter ----
-  if (!Number.isNaN(minAmountVal) || !Number.isNaN(maxAmountVal)) {
-    const debitCond: Record<string, number> = { gt: 0 };
-    const creditCond: Record<string, number> = { gt: 0 };
-    if (!Number.isNaN(minAmountVal)) {
-      debitCond.gte = minAmountVal;
-      creditCond.gte = minAmountVal;
-    }
-    if (!Number.isNaN(maxAmountVal)) {
-      debitCond.lte = maxAmountVal;
-      creditCond.lte = maxAmountVal;
-    }
-    where.OR = [{ debit: debitCond }, { credit: creditCond }];
-  }
-
-  // ---- Budget-line filters (in-memory, debit transactions only) ----
-  // Both `unbudgeted` and `budgeted` require loading budget lines to determine coverage.
-  if (unbudgeted && budgeted) {
+  const raw = Object.fromEntries(request.nextUrl.searchParams.entries());
+  const parsed = querySchema.safeParse(raw);
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: 'budgeted and unbudgeted cannot both be true' },
+      { error: 'Invalid query', issues: parsed.error.issues.map((issue) => issue.message) },
       { status: 400 },
     );
   }
-  if (unbudgeted || budgeted) {
-    where.debit = { gt: 0 };
 
-    const [budgetLines, allTags] = await Promise.all([
+  const query = parsed.data;
+  const responseLimit = query.limit;
+  const where: Prisma.TransactionWhereInput = { archived: query.archived === 'true' };
+
+  if (query.start && query.end) {
+    where.date = {
+      gte: new Date(`${query.start}T00:00:00.000Z`),
+      lte: new Date(`${query.end}T23:59:59.999Z`),
+    };
+  }
+  if (query.search) where.name = { contains: query.search };
+
+  const tagIds = query.tagIds
+    ?.split(',')
+    .map((id) => id.trim())
+    .filter(Boolean)
+    .slice(0, 200);
+  if (query.tagId) where.tags = { some: { tagId: query.tagId } };
+  else if (tagIds?.length) where.tags = { some: { tagId: { in: tagIds } } };
+  if (query.untaggedOnly === 'true') where.tags = { none: { tag: { isSource: false } } };
+
+  if (query.type === 'debit') where.debit = { gt: 0 };
+  if (query.type === 'credit') where.credit = { gt: 0 };
+  if (query.minAmount !== undefined || query.maxAmount !== undefined) {
+    const amount = {
+      ...(query.minAmount !== undefined && { gte: toCents(query.minAmount) }),
+      ...(query.maxAmount !== undefined && { lte: toCents(query.maxAmount) }),
+      gt: 0,
+    };
+    where.OR = [{ debit: amount }, { credit: amount }];
+  }
+
+  const needsBudgetFilter = query.budgeted === 'true' || query.unbudgeted === 'true';
+  if (needsBudgetFilter) {
+    where.debit = { gt: 0 };
+    const [transactions, budgets, lines, tags] = await Promise.all([
+      prisma.transaction.findMany({
+        where,
+        include: transactionInclude,
+        orderBy: { date: 'desc' },
+        take: 10_001,
+      }),
+      prisma.budget.findMany({ orderBy: { startDate: 'asc' } }),
       prisma.budgetLine.findMany({
-        include: { tags: { include: { tag: { select: { id: true } } } } },
+        select: { budgetId: true, tags: { select: { tag: { select: { id: true } } } } },
       }),
       prisma.tag.findMany({ select: { id: true, parentId: true } }),
     ]);
-
-    const childrenMap = new Map<string, string[]>();
-    for (const tag of allTags) {
-      if (tag.parentId) {
-        const existing = childrenMap.get(tag.parentId) ?? [];
-        existing.push(tag.id);
-        childrenMap.set(tag.parentId, existing);
-      }
+    if (transactions.length > 10_000) {
+      return NextResponse.json(
+        { error: 'Too many matching transactions; narrow the filters or date range' },
+        { status: 413 },
+      );
     }
-
-    const coveredTagIds = new Set<string>();
-    for (const bl of budgetLines) {
-      const directTagIds = bl.tags.map((blt) => blt.tag.id);
-      const expanded = collectDescendantTagIds(directTagIds, childrenMap);
-      for (const id of expanded) {
-        coveredTagIds.add(id);
-      }
-    }
-
-    const allTxs = await fetchAllMatching(where);
-
-    const filtered = unbudgeted
-      ? allTxs.filter((tx) => {
-          const nonSourceTagIds = tx.tags.filter((tt) => !tt.tag.isSource).map((tt) => tt.tag.id);
-          return (
-            nonSourceTagIds.length === 0 || !nonSourceTagIds.some((id) => coveredTagIds.has(id))
-          );
-        })
-      : allTxs.filter((tx) => {
-          // budgeted=true: keep only transactions covered by at least one budget line tag
-          const nonSourceTagIds = tx.tags.filter((tt) => !tt.tag.isSource).map((tt) => tt.tag.id);
-          return nonSourceTagIds.length > 0 && nonSourceTagIds.some((id) => coveredTagIds.has(id));
-        });
-
-    const total = filtered.length;
-    const paginated = nolimit ? filtered : filtered.slice((page - 1) * limit, page * limit);
-
+    const coveredByBudget = buildCoveredTagsByBudget(lines, buildChildrenMap(tags));
+    const filtered = transactions.filter((transaction) => {
+      const budget = findApplicableBudget(budgets, transaction.date);
+      const covered = budget
+        ? (coveredByBudget.get(budget.id) ?? new Set<string>())
+        : new Set<string>();
+      const tracked = isFullyTracked(
+        getNonSourceTagIds(transaction.tags.map((entry) => entry.tag)),
+        covered,
+      );
+      return query.budgeted === 'true' ? tracked : !tracked;
+    });
+    const startIndex = (query.page - 1) * responseLimit;
+    const pageData = filtered.slice(startIndex, startIndex + responseLimit);
     return NextResponse.json({
-      data: paginated.map(formatTransaction),
-      total,
-      page,
-      totalPages: nolimit ? 1 : Math.ceil(total / limit) || 1,
+      data: pageData.map(transactionWithTagsFromCents),
+      total: filtered.length,
+      page: query.page,
+      totalPages: Math.max(1, Math.ceil(filtered.length / responseLimit)),
     });
   }
 
-  // ---- Standard path ----
-  if (nolimit) {
-    const [transactions, total] = await Promise.all([
-      prisma.transaction.findMany({
-        where,
-        include: {
-          tags: {
-            include: {
-              tag: { select: { id: true, name: true, color: true, isSource: true } },
-            },
-          },
-        },
-        orderBy: { date: 'desc' },
-      }),
-      prisma.transaction.count({ where }),
-    ]);
-
-    return NextResponse.json({
-      data: transactions.map(formatTransaction),
-      total,
-      page: 1,
-      totalPages: 1,
-    });
-  }
-
+  const page = query.page;
   const [transactions, total] = await Promise.all([
     prisma.transaction.findMany({
       where,
-      include: {
-        tags: {
-          include: {
-            tag: {
-              select: { id: true, name: true, color: true, isSource: true },
-            },
-          },
-        },
-      },
+      include: transactionInclude,
       orderBy: { date: 'desc' },
-      skip: (page - 1) * limit,
-      take: limit,
+      skip: (page - 1) * responseLimit,
+      take: responseLimit,
     }),
     prisma.transaction.count({ where }),
   ]);
-
   return NextResponse.json({
-    data: transactions.map(formatTransaction),
+    data: transactions.map(transactionWithTagsFromCents),
     total,
     page,
-    totalPages: Math.ceil(total / limit) || 1,
+    totalPages: Math.max(1, Math.ceil(total / responseLimit)),
   });
 }

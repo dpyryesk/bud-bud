@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { parseDateInputAsUtc } from '@/lib/date-utils';
+import { dateOnlySchema, readJson } from '@/lib/api-validation';
+import { z } from 'zod';
+
+const copySchema = z
+  .object({ startDate: dateOnlySchema, resetRollover: z.boolean().optional() })
+  .strict();
 
 // POST /api/budgets/:id/copy - Copy a budget to a new startDate
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const body = await request.json();
-  const { startDate, resetRollover } = body;
-
-  if (!startDate || typeof startDate !== 'string') {
-    return NextResponse.json({ error: 'startDate is required' }, { status: 400 });
-  }
+  const body = await readJson(request, copySchema);
+  if (!body.success) return body.response;
+  const { startDate, resetRollover } = body.data;
 
   const parsedDate = parseDateInputAsUtc(startDate);
   if (isNaN(parsedDate.getTime())) {
@@ -32,6 +35,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
       incomeSources: {
         orderBy: { order: 'asc' },
+      },
+      untrackedCategories: {
+        orderBy: { order: 'asc' },
+        include: { tags: true },
       },
     },
   });
@@ -117,6 +124,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             order: incomeSource.order,
           },
         });
+      }
+
+      // 6. Preserve untracked-category configuration and its tag links.
+      for (const category of source.untrackedCategories) {
+        const copied = await tx.untrackedCategory.create({
+          data: { budgetId: budget.id, name: category.name, order: category.order },
+        });
+        if (category.tags.length) {
+          await tx.untrackedCategoryTag.createMany({
+            data: category.tags.map((tag) => ({
+              untrackedCategoryId: copied.id,
+              tagId: tag.tagId,
+            })),
+          });
+        }
       }
 
       return budget;

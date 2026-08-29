@@ -1,67 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@/generated/prisma/client';
+import { readJson } from '@/lib/api-validation';
+import { savedCsvMappingSchema } from '@/lib/csv-mapping-validation';
 import { prisma } from '@/lib/prisma';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-// PUT /api/csv-mappings/:id - Update a saved CSV mapping
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   const { id } = await params;
-  const body = await request.json();
-  const {
-    name,
-    dateColumn,
-    nameColumn,
-    debitColumn,
-    creditColumn,
-    sourceColumn,
-    dateFormat,
-    skipFirstRow,
-    sourceTagId,
-  } = body;
-
-  if (!name || !dateColumn || !nameColumn || !debitColumn || !creditColumn) {
-    return NextResponse.json(
-      { error: 'name, dateColumn, nameColumn, debitColumn, creditColumn are required' },
-      { status: 400 },
-    );
-  }
-
-  try {
-    const mapping = await prisma.csvMapping.update({
-      where: { id },
-      data: {
-        name,
-        dateColumn,
-        nameColumn,
-        debitColumn,
-        creditColumn,
-        sourceColumn: sourceColumn && sourceColumn !== 'none' ? sourceColumn : '',
-        dateFormat: dateFormat || 'YYYY-MM-DD',
-        skipFirstRow: Boolean(skipFirstRow),
-        sourceTagId: sourceTagId && sourceTagId !== 'none' ? sourceTagId : null,
-      },
+  const body = await readJson(request, savedCsvMappingSchema);
+  if (!body.success) return body.response;
+  if (body.data.sourceTagId) {
+    const tag = await prisma.tag.findFirst({
+      where: { id: body.data.sourceTagId, isSource: true },
+      select: { id: true },
     });
-
-    return NextResponse.json(mapping);
-  } catch (e: unknown) {
-    if (e && typeof e === 'object' && 'code' in e && e.code === 'P2025') {
+    if (!tag)
+      return NextResponse.json(
+        { error: 'sourceTagId must reference a source tag' },
+        { status: 400 },
+      );
+  }
+  try {
+    return NextResponse.json(
+      await prisma.csvMapping.update({
+        where: { id },
+        data: {
+          ...body.data,
+          sourceColumn: body.data.sourceColumn === 'none' ? '' : body.data.sourceColumn,
+          debitColumn: body.data.debitColumn === 'none' ? '' : body.data.debitColumn,
+          creditColumn: body.data.creditColumn === 'none' ? '' : body.data.creditColumn,
+        },
+      }),
+    );
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
       return NextResponse.json({ error: 'Mapping not found' }, { status: 404 });
     }
-    return NextResponse.json({ error: 'Update failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Mapping name already exists' }, { status: 409 });
   }
 }
 
-// DELETE /api/csv-mappings/:id - Delete a saved CSV mapping
 export async function DELETE(_request: NextRequest, { params }: RouteContext) {
   const { id } = await params;
-
   try {
     await prisma.csvMapping.delete({ where: { id } });
-    return NextResponse.json({ success: true });
-  } catch (e: unknown) {
-    if (e && typeof e === 'object' && 'code' in e && e.code === 'P2025') {
-      return NextResponse.json({ error: 'Mapping not found' }, { status: 404 });
-    }
-    return NextResponse.json({ error: 'Delete failed' }, { status: 500 });
+    return new NextResponse(null, { status: 204 });
+  } catch {
+    return NextResponse.json({ error: 'Mapping not found' }, { status: 404 });
   }
 }

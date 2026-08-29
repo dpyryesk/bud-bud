@@ -9,6 +9,7 @@ import ImportUploadStep from '@/components/import/import-upload-step';
 import ImportConfigureStep from '@/components/import/import-configure-step';
 import ImportPreviewStep from '@/components/import/import-preview-step';
 import ImportDoneStep from '@/components/import/import-done-step';
+import { buildTagsInDisplayOrder } from '@/lib/tag-tree';
 
 export default function ImportPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -58,7 +59,11 @@ export default function ImportPage() {
     const res = await fetch('/api/tags');
     if (res.ok) {
       const tags = await res.json();
-      setSourceTags(tags.filter((t: SourceTag & { isSource: boolean }) => t.isSource));
+      setSourceTags(
+        buildTagsInDisplayOrder(
+          tags.filter((tag: SourceTag & { isSource: boolean }) => tag.isSource),
+        ),
+      );
     }
   }, []);
 
