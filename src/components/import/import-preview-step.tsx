@@ -12,9 +12,12 @@ import {
 } from '@/components/ui/table';
 import type { ImportPreview } from '@/types';
 import RowStatusBadge from '@/components/import/import-row-status-badge';
+import type { SourceTag } from '@/components/import/constants';
 
 interface ImportPreviewStepProps {
   preview: ImportPreview;
+  sourceValueTagMap: Record<string, string>;
+  sourceTags: SourceTag[];
   importing: boolean;
   onBack: () => void;
   onImport: () => void;
@@ -52,12 +55,18 @@ const filterRows = (rows: ImportPreview['rows'], tab: TabKey) => {
 
 export default function ImportPreviewStep({
   preview,
+  sourceValueTagMap,
+  sourceTags,
   importing,
   onBack,
   onImport,
 }: ImportPreviewStepProps) {
   const hasSourceColumn = preview.rows.some((r) => r.source);
   const tabDefs = buildTabDefs(preview);
+  const sourceValueTagFor = (source: string) => {
+    const tagId = sourceValueTagMap[source];
+    return tagId ? sourceTags.find((tag) => tag.id === tagId) : undefined;
+  };
 
   return (
     <>
@@ -103,13 +112,14 @@ export default function ImportPreviewStep({
                           <TableHead className="w-28 text-right">Debit</TableHead>
                           <TableHead className="w-28 text-right">Credit</TableHead>
                           {hasSourceColumn && <TableHead>Source</TableHead>}
+                          {hasSourceColumn && <TableHead>Source Value Tags</TableHead>}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {rows.length === 0 ? (
                           <TableRow>
                             <TableCell
-                              colSpan={hasSourceColumn ? 6 : 5}
+                              colSpan={hasSourceColumn ? 7 : 5}
                               className="text-muted-foreground py-10 text-center"
                             >
                               No rows in this category
@@ -150,6 +160,23 @@ export default function ImportPreviewStep({
                               {hasSourceColumn && (
                                 <TableCell className="text-muted-foreground max-w-32 truncate text-xs">
                                   {row.source}
+                                </TableCell>
+                              )}
+                              {hasSourceColumn && (
+                                <TableCell className="max-w-40 text-xs">
+                                  {sourceValueTagFor(row.source) ? (
+                                    <span className="flex items-center gap-1.5 truncate">
+                                      <span
+                                        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                                        style={{
+                                          backgroundColor: sourceValueTagFor(row.source)!.color,
+                                        }}
+                                      />
+                                      {sourceValueTagFor(row.source)!.name}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">â€”</span>
+                                  )}
                                 </TableCell>
                               )}
                             </TableRow>

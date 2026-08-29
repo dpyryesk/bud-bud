@@ -146,6 +146,7 @@ export type CsvMappingConfig = {
   sourceColumn: string;
   dateFormat: string;
   sourceTagId: string | null;
+  sourceValueTagMap: Record<string, string>;
 };
 
 export type ParsedTransaction = {

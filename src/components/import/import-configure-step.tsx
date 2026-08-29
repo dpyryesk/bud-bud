@@ -1,4 +1,4 @@
-import { AlertCircle, Eye, Loader2, Plus } from 'lucide-react';
+import { AlertCircle, Eye, Loader2, Plus, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { CsvMapping, SourceTag } from '@/components/import/constants';
@@ -44,6 +44,7 @@ interface ImportConfigureStepProps {
   // Actions
   mappingIsReady: boolean;
   onSaveMapping: () => void;
+  onUpdateMapping: () => void;
   previewLoading: boolean;
   previewError: string;
   onBack: () => void;
@@ -82,6 +83,7 @@ export default function ImportConfigureStep({
   uniqueSourceValues,
   mappingIsReady,
   onSaveMapping,
+  onUpdateMapping,
   previewLoading,
   previewError,
   onBack,
@@ -134,12 +136,26 @@ export default function ImportConfigureStep({
             uniqueSourceValues={uniqueSourceValues}
           />
 
-          {mappingName && mappingIsReady && !selectedMappingId && (
-            <Button variant="outline" size="sm" onClick={onSaveMapping}>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!!selectedMappingId || !mappingName || !mappingIsReady}
+              onClick={onSaveMapping}
+            >
               <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Save Mapping for Reuse
+              Create New Mapping
             </Button>
-          )}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!selectedMappingId || !mappingName || !mappingIsReady}
+              onClick={onUpdateMapping}
+            >
+              <Save className="mr-1.5 h-3.5 w-3.5" />
+              Update Saved Mapping
+            </Button>
+          </div>
 
           {previewError && (
             <div className="bg-destructive/10 text-destructive flex items-center gap-2 rounded-md p-3 text-sm">

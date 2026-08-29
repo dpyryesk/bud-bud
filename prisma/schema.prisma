@@ -127,6 +127,7 @@ model CsvMapping {
   dateFormat   String   @default("YYYY-MM-DD")
   skipFirstRow Boolean  @default(false)
   sourceTagId  String?
+  sourceValueTagMap String @default("{}")
   sourceTag    Tag?     @relation(fields: [sourceTagId], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())
 

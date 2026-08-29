@@ -10,26 +10,34 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
   const { id } = await params;
   const body = await readJson(request, savedCsvMappingSchema);
   if (!body.success) return body.response;
-  if (body.data.sourceTagId) {
-    const tag = await prisma.tag.findFirst({
-      where: { id: body.data.sourceTagId, isSource: true },
-      select: { id: true },
-    });
-    if (!tag)
-      return NextResponse.json(
-        { error: 'sourceTagId must reference a source tag' },
-        { status: 400 },
-      );
+  const tagIds = [
+    ...new Set(
+      [body.data.sourceTagId, ...Object.values(body.data.sourceValueTagMap)].filter(
+        (tagId): tagId is string => tagId !== null,
+      ),
+    ),
+  ];
+  if (
+    tagIds.length > 0 &&
+    (await prisma.tag.count({ where: { id: { in: tagIds }, isSource: true } })) !== tagIds.length
+  ) {
+    return NextResponse.json(
+      { error: 'Every configured source tag must exist and be a source tag' },
+      { status: 400 },
+    );
   }
   try {
+    const { sourceTagId, ...mappingData } = body.data;
     return NextResponse.json(
       await prisma.csvMapping.update({
         where: { id },
         data: {
-          ...body.data,
+          ...mappingData,
+          sourceValueTagMap: JSON.stringify(body.data.sourceValueTagMap),
           sourceColumn: body.data.sourceColumn === 'none' ? '' : body.data.sourceColumn,
           debitColumn: body.data.debitColumn === 'none' ? '' : body.data.debitColumn,
           creditColumn: body.data.creditColumn === 'none' ? '' : body.data.creditColumn,
+          sourceTag: sourceTagId ? { connect: { id: sourceTagId } } : { disconnect: true },
         },
       }),
     );
@@ -37,7 +45,11 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
       return NextResponse.json({ error: 'Mapping not found' }, { status: 404 });
     }
-    return NextResponse.json({ error: 'Mapping name already exists' }, { status: 409 });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return NextResponse.json({ error: 'Mapping name already exists' }, { status: 409 });
+    }
+    console.error('Unable to update CSV mapping:', error);
+    return NextResponse.json({ error: 'Unable to update mapping' }, { status: 400 });
   }
 }
 

@@ -16,6 +16,7 @@ export const savedCsvMappingSchema = z
     dateFormat: z.enum(['YYYY-MM-DD', 'MM/DD/YYYY', 'DD/MM/YYYY', 'MM-DD-YYYY']),
     skipFirstRow: z.boolean(),
     sourceTagId: idSchema.nullable(),
+    sourceValueTagMap: z.record(z.string().min(1).max(10_000), idSchema).default({}),
   })
   .strict()
   .refine(

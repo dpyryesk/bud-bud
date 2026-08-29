@@ -10,6 +10,7 @@ import ImportConfigureStep from '@/components/import/import-configure-step';
 import ImportPreviewStep from '@/components/import/import-preview-step';
 import ImportDoneStep from '@/components/import/import-done-step';
 import { buildTagsInDisplayOrder } from '@/lib/tag-tree';
+import { buildImportMapping } from '@/lib/csv-mapping';
 
 export default function ImportPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -87,6 +88,7 @@ export default function ImportPage() {
     setDateFormat(m.dateFormat || 'YYYY-MM-DD');
     setSkipFirstRow(Boolean(m.skipFirstRow));
     setSourceTagId(m.sourceTagId || '');
+    setSourceValueTagMap(m.sourceValueTagMap);
   }, []);
 
   const clearMappingForm = useCallback(() => {
@@ -137,21 +139,27 @@ export default function ImportPage() {
   };
 
   const handleSaveMapping = async () => {
-    if (!mappingName || !dateColumn || !nameColumn || !debitColumn || !creditColumn) return;
+    const mapping = getMappingForImport();
+    if (!mapping || !mapping.name) return;
     const res = await fetch('/api/csv-mappings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: mappingName,
-        dateColumn,
-        nameColumn,
-        debitColumn,
-        creditColumn,
-        sourceColumn: sourceColumn || '',
-        dateFormat,
-        skipFirstRow,
-        sourceTagId: sourceTagId || null,
-      }),
+      body: JSON.stringify(mapping),
+    });
+    if (res.ok) {
+      const created: CsvMapping = await res.json();
+      setSelectedMappingId(created.id);
+      await fetchMappings();
+    }
+  };
+
+  const handleUpdateMapping = async () => {
+    const mapping = getMappingForImport();
+    if (!selectedMappingId || !mapping || !mapping.name) return;
+    const res = await fetch(`/api/csv-mappings/${selectedMappingId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mapping),
     });
     if (res.ok) await fetchMappings();
   };
@@ -166,22 +174,18 @@ export default function ImportPage() {
   };
 
   const getMappingForImport = () => {
-    if (!dateColumn || !nameColumn || !debitColumn || !creditColumn) return null;
-    const filteredValueTagMap = Object.fromEntries(
-      Object.entries(sourceValueTagMap).filter(([, v]) => v && v !== ''),
-    );
-    return {
+    return buildImportMapping({
       name: mappingName,
       dateColumn,
       nameColumn,
       debitColumn,
       creditColumn,
-      sourceColumn: sourceColumn && sourceColumn !== 'none' ? sourceColumn : '',
+      sourceColumn,
       dateFormat,
-      sourceTagId: sourceTagId && sourceTagId !== 'none' ? sourceTagId : null,
-      sourceValueTagMap: filteredValueTagMap,
+      sourceTagId,
+      sourceValueTagMap,
       skipFirstRow,
-    };
+    });
   };
 
   const handleLoadPreview = async () => {
@@ -324,6 +328,7 @@ export default function ImportPage() {
           uniqueSourceValues={uniqueSourceValues}
           mappingIsReady={mappingIsReady}
           onSaveMapping={handleSaveMapping}
+          onUpdateMapping={handleUpdateMapping}
           previewLoading={previewLoading}
           previewError={previewError}
           onBack={() => setStep('upload')}
@@ -334,6 +339,8 @@ export default function ImportPage() {
       {step === 'preview' && preview && (
         <ImportPreviewStep
           preview={preview}
+          sourceValueTagMap={sourceValueTagMap}
+          sourceTags={sourceTags}
           importing={importing}
           onBack={() => setStep('configure')}
           onImport={handleImport}

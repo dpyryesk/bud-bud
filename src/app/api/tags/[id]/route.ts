@@ -3,6 +3,20 @@ import { z } from 'zod';
 import { colorSchema, idSchema, nameSchema, readJson } from '@/lib/api-validation';
 import { prisma } from '@/lib/prisma';
 
+function removeTagFromSourceValueTagMap(value: string, tagId: string) {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const entries = Object.entries(parsed).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    );
+    const cleanedEntries = entries.filter(([, mappedTagId]) => mappedTagId !== tagId);
+    return cleanedEntries.length === entries.length ? null : Object.fromEntries(cleanedEntries);
+  } catch {
+    return null;
+  }
+}
+
 const updateSchema = z
   .object({
     name: nameSchema.optional(),
@@ -112,6 +126,22 @@ export async function DELETE(
         data: { parentId: tag.parentId, order: (maximum._max.order ?? -1) + 1 + offset },
       });
     }
+    const mappings = await tx.csvMapping.findMany({
+      select: { id: true, sourceValueTagMap: true },
+    });
+    await Promise.all(
+      mappings.flatMap((mapping) => {
+        const sourceValueTagMap = removeTagFromSourceValueTagMap(mapping.sourceValueTagMap, id);
+        return sourceValueTagMap
+          ? [
+              tx.csvMapping.update({
+                where: { id: mapping.id },
+                data: { sourceValueTagMap: JSON.stringify(sourceValueTagMap) },
+              }),
+            ]
+          : [];
+      }),
+    );
     await tx.tag.delete({ where: { id } });
     return true;
   });

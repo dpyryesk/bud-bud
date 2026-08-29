@@ -11,6 +11,7 @@ export type CsvMapping = {
   dateFormat: string;
   skipFirstRow: boolean;
   sourceTagId: string | null;
+  sourceValueTagMap: Record<string, string>;
 };
 
 export type SourceTag = {
