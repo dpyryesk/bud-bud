@@ -47,6 +47,7 @@ export default function BudgetPage() {
   // Raw data from API
   const [summaryLines, setSummaryLines] = useState<BudgetSummaryLine[]>([]);
   const [activeBudget, setActiveBudget] = useState<Budget | null>(null);
+  const [latestBudgetId, setLatestBudgetId] = useState<string | null>(null);
   const [tags, setTags] = useState<TagOptionWithLevel[]>([]);
   const [loading, setLoading] = useState(false);
   const [importingTags, setImportingTags] = useState(false);
@@ -148,8 +149,22 @@ export default function BudgetPage() {
     }
   }, []);
 
+  const fetchLatestBudget = useCallback(async () => {
+    try {
+      const res = await fetch('/api/budgets');
+      if (!res.ok) {
+        setLatestBudgetId(null);
+        return;
+      }
+      const budgets = (await res.json()) as Budget[];
+      setLatestBudgetId(budgets.at(-1)?.id ?? null);
+    } catch {
+      setLatestBudgetId(null);
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
-    const summary = await fetchSummary();
+    const [summary] = await Promise.all([fetchSummary(), fetchLatestBudget()]);
     const lines = summary.lines;
     const cats = await fetchCategories(summary.activeBudget?.id ?? null);
     setOrderedCategories(cats);
@@ -165,7 +180,7 @@ export default function BudgetPage() {
         .filter((l) => l.budgetLine.categoryId === null)
         .sort((a, b) => a.budgetLine.order - b.budgetLine.order),
     );
-  }, [fetchCategories, fetchSummary]);
+  }, [fetchCategories, fetchLatestBudget, fetchSummary]);
 
   const parseErrorMessage = useCallback(async (res: Response) => {
     try {
@@ -684,7 +699,7 @@ export default function BudgetPage() {
 
       {/* Yearly Untracked Spending */}
       <UntrackedCategoriesSection
-        budgetId={activeBudget?.id ?? null}
+        creationBudgetId={latestBudgetId}
         period={yearPeriod}
         totalYearlyNetIncome={totalYearlyNetIncome}
         availableTags={tags}

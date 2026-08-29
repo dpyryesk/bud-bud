@@ -18,7 +18,8 @@ import type {
 import type { TagOptionWithLevel } from '@/components/budget/constants';
 
 interface UntrackedCategoriesSectionProps {
-  budgetId: string | null;
+  budgetId?: string | null;
+  creationBudgetId?: string | null;
   period: TimePeriod;
   totalYearlyNetIncome: number;
   availableTags: TagOptionWithLevel[];
@@ -36,12 +37,14 @@ function pct(value: number, total: number): string {
 
 export function UntrackedCategoriesSection({
   budgetId,
+  creationBudgetId,
   period,
   totalYearlyNetIncome,
   availableTags,
   title = 'Untracked Spending',
   onDataChange,
 }: UntrackedCategoriesSectionProps) {
+  const targetBudgetId = creationBudgetId === undefined ? budgetId : creationBudgetId;
   const [categories, setCategories] = useState<UntrackedCategoryWithSpending[]>([]);
   const [totalTrulyUncategorized, setTotalTrulyUncategorized] = useState(0);
   const [trulyUncategorizedTransactions, setTrulyUncategorizedTransactions] = useState<
@@ -62,19 +65,15 @@ export function UntrackedCategoriesSection({
   const [showingUncategorized, setShowingUncategorized] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!budgetId) {
-      setCategories([]);
-      setTotalTrulyUncategorized(0);
-      setTrulyUncategorizedTransactions([]);
-      return;
-    }
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        budgetId,
         start: format(period.start, 'yyyy-MM-dd'),
         end: format(period.end, 'yyyy-MM-dd'),
       });
+      if (budgetId) {
+        params.set('budgetId', budgetId);
+      }
       const res = await fetch(`/api/untracked-categories?${params}`);
       if (res.ok) {
         const data = (await res.json()) as UntrackedCategoriesResponse;
@@ -148,7 +147,7 @@ export function UntrackedCategoriesSection({
               setEditingCategory(null);
               setDialogOpen(true);
             }}
-            disabled={!budgetId}
+            disabled={!targetBudgetId}
           >
             <Plus className="mr-2 h-4 w-4" />
             New Category
@@ -274,7 +273,7 @@ export function UntrackedCategoriesSection({
       <UntrackedCategoryDialog
         open={dialogOpen}
         onOpenChange={handleDialogOpenChange}
-        budgetId={budgetId}
+        budgetId={targetBudgetId ?? null}
         editingCategory={editingCategory}
         availableTags={availableTags}
         onSuccess={handleSuccess}
