@@ -121,7 +121,7 @@ export type IncomeSource = {
 
 export type UntrackedCategoryWithSpending = {
   id: string;
-  budgetId: string;
+  year: number;
   name: string;
   order: number;
   tags: TagFlat[];

@@ -11,6 +11,7 @@ import {
 import { toCents } from '@/lib/money';
 import { prisma } from '@/lib/prisma';
 import { getNonSourceTagIds, isFullyTracked } from '@/lib/tag-allocation';
+import { collectDescendantTagIds } from '@/lib/tag-tree';
 
 const querySchema = z
   .object({
@@ -23,6 +24,7 @@ const querySchema = z
     untaggedOnly: z.enum(['true', 'false']).optional(),
     unbudgeted: z.enum(['true', 'false']).optional(),
     budgeted: z.enum(['true', 'false']).optional(),
+    uncategorizedOnly: z.enum(['true', 'false']).optional(),
     type: z.enum(['debit', 'credit']).optional(),
     search: z.string().trim().max(200).optional(),
     minAmount: moneyInputSchema.optional(),
@@ -38,6 +40,12 @@ const querySchema = z
     }
     if (value.budgeted === 'true' && value.unbudgeted === 'true') {
       context.addIssue({ code: 'custom', message: 'budgeted and unbudgeted cannot both be true' });
+    }
+    if (value.uncategorizedOnly === 'true' && value.unbudgeted !== 'true') {
+      context.addIssue({
+        code: 'custom',
+        message: 'uncategorizedOnly requires unbudgeted=true',
+      });
     }
     if (
       value.minAmount !== undefined &&
@@ -99,7 +107,7 @@ export async function GET(request: NextRequest) {
   const needsBudgetFilter = query.budgeted === 'true' || query.unbudgeted === 'true';
   if (needsBudgetFilter) {
     where.debit = { gt: 0 };
-    const [transactions, budgets, lines, tags] = await Promise.all([
+    const [transactions, budgets, lines, tags, untrackedCategories] = await Promise.all([
       prisma.transaction.findMany({
         where,
         include: transactionInclude,
@@ -111,6 +119,11 @@ export async function GET(request: NextRequest) {
         select: { budgetId: true, tags: { select: { tag: { select: { id: true } } } } },
       }),
       prisma.tag.findMany({ select: { id: true, parentId: true } }),
+      query.uncategorizedOnly === 'true'
+        ? prisma.untrackedCategory.findMany({
+            select: { year: true, tags: { select: { tagId: true } } },
+          })
+        : Promise.resolve([]),
     ]);
     if (transactions.length > 10_000) {
       return NextResponse.json(
@@ -118,16 +131,34 @@ export async function GET(request: NextRequest) {
         { status: 413 },
       );
     }
-    const coveredByBudget = buildCoveredTagsByBudget(lines, buildChildrenMap(tags));
+    const childrenMap = buildChildrenMap(tags);
+    const coveredByBudget = buildCoveredTagsByBudget(lines, childrenMap);
+    const untrackedCategoryTagIdsByYear = new Map<number, Set<string>>();
+    for (const category of untrackedCategories) {
+      const tagIds = untrackedCategoryTagIdsByYear.get(category.year) ?? new Set<string>();
+      for (const tagId of collectDescendantTagIds(
+        category.tags.map((tag) => tag.tagId),
+        childrenMap,
+      )) {
+        tagIds.add(tagId);
+      }
+      untrackedCategoryTagIdsByYear.set(category.year, tagIds);
+    }
     const filtered = transactions.filter((transaction) => {
       const budget = findApplicableBudget(budgets, transaction.date);
       const covered = budget
         ? (coveredByBudget.get(budget.id) ?? new Set<string>())
         : new Set<string>();
-      const tracked = isFullyTracked(
-        getNonSourceTagIds(transaction.tags.map((entry) => entry.tag)),
-        covered,
-      );
+      const tagIds = getNonSourceTagIds(transaction.tags.map((entry) => entry.tag));
+      const tracked = isFullyTracked(tagIds, covered);
+      if (
+        query.uncategorizedOnly === 'true' &&
+        tagIds.some((tagId) =>
+          untrackedCategoryTagIdsByYear.get(transaction.date.getUTCFullYear())?.has(tagId),
+        )
+      ) {
+        return false;
+      }
       return query.budgeted === 'true' ? tracked : !tracked;
     });
     const startIndex = (query.page - 1) * responseLimit;

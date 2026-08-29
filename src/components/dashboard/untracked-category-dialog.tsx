@@ -14,7 +14,7 @@ import type { TagOptionWithLevel } from '@/components/budget/constants';
 interface UntrackedCategoryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  budgetId: string | null;
+  year: number;
   editingCategory: UntrackedCategoryWithSpending | null;
   availableTags: TagOptionWithLevel[];
   onSuccess: () => Promise<void>;
@@ -23,7 +23,7 @@ interface UntrackedCategoryDialogProps {
 export function UntrackedCategoryDialog({
   open,
   onOpenChange,
-  budgetId,
+  year,
   editingCategory,
   availableTags,
   onSuccess,
@@ -33,7 +33,7 @@ export function UntrackedCategoryDialog({
       {open && (
         <UntrackedCategoryDialogContent
           key={editingCategory?.id ?? 'new'}
-          budgetId={budgetId}
+          year={year}
           editingCategory={editingCategory}
           availableTags={availableTags}
           onOpenChange={onOpenChange}
@@ -45,7 +45,7 @@ export function UntrackedCategoryDialog({
 }
 
 function UntrackedCategoryDialogContent({
-  budgetId,
+  year,
   editingCategory,
   availableTags,
   onOpenChange,
@@ -79,14 +79,10 @@ function UntrackedCategoryDialogContent({
           body: JSON.stringify({ name: formName.trim(), tagIds: formTagIds }),
         });
       } else {
-        if (!budgetId) {
-          setFormError('No active budget selected.');
-          return;
-        }
         res = await fetch('/api/untracked-categories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ budgetId, name: formName.trim(), tagIds: formTagIds }),
+          body: JSON.stringify({ year, name: formName.trim(), tagIds: formTagIds }),
         });
       }
 

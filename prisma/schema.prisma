@@ -69,7 +69,6 @@ model Budget {
   categories          BudgetCategory[]
   lines               BudgetLine[]
   incomeSources       IncomeSource[]
-  untrackedCategories UntrackedCategory[]
 }
 
 model BudgetCategory {
@@ -163,15 +162,14 @@ model IncomeSource {
 
 model UntrackedCategory {
   id        String                 @id @default(cuid())
-  budgetId  String
-  budget    Budget                 @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  year      Int
   name      String
   order     Int                    @default(0)
   createdAt DateTime               @default(now())
   updatedAt DateTime               @updatedAt
   tags      UntrackedCategoryTag[]
 
-  @@index([budgetId])
+  @@index([year])
 }
 
 model UntrackedCategoryTag {

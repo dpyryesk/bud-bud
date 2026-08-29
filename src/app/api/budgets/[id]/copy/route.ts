@@ -36,10 +36,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       incomeSources: {
         orderBy: { order: 'asc' },
       },
-      untrackedCategories: {
-        orderBy: { order: 'asc' },
-        include: { tags: true },
-      },
     },
   });
 
@@ -124,21 +120,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             order: incomeSource.order,
           },
         });
-      }
-
-      // 6. Preserve untracked-category configuration and its tag links.
-      for (const category of source.untrackedCategories) {
-        const copied = await tx.untrackedCategory.create({
-          data: { budgetId: budget.id, name: category.name, order: category.order },
-        });
-        if (category.tags.length) {
-          await tx.untrackedCategoryTag.createMany({
-            data: category.tags.map((tag) => ({
-              untrackedCategoryId: copied.id,
-              tagId: tag.tagId,
-            })),
-          });
-        }
       }
 
       return budget;

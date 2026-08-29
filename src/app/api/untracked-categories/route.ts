@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { transactionWithTagsFromCents } from '@/lib/api-formatters';
 import {
-  idSchema,
   nameSchema,
   orderSchema,
   parseDateRange,
@@ -21,7 +20,7 @@ import { collectDescendantTagIds } from '@/lib/tag-tree';
 
 const createSchema = z
   .object({
-    budgetId: idSchema,
+    year: z.number().int().min(1900).max(9999),
     name: nameSchema,
     tagIds: tagIdsSchema.default([]),
     order: orderSchema.optional(),
@@ -31,9 +30,14 @@ const createSchema = z
 export async function GET(request: NextRequest) {
   const range = parseDateRange(request.nextUrl.searchParams);
   if (!range.success) return range.response;
-  const requestedBudgetId = request.nextUrl.searchParams.get('budgetId');
-  if (requestedBudgetId && !idSchema.safeParse(requestedBudgetId).success) {
-    return NextResponse.json({ error: 'Invalid budgetId' }, { status: 400 });
+  const requestedYear = z.coerce
+    .number()
+    .int()
+    .min(1900)
+    .max(9999)
+    .safeParse(request.nextUrl.searchParams.get('year'));
+  if (!requestedYear.success) {
+    return NextResponse.json({ error: 'Valid year query param is required' }, { status: 400 });
   }
   const [budgets, lines, categories, tags, transactions] = await Promise.all([
     prisma.budget.findMany({ orderBy: { startDate: 'asc' } }),
@@ -41,6 +45,7 @@ export async function GET(request: NextRequest) {
       select: { budgetId: true, tags: { select: { tag: { select: { id: true } } } } },
     }),
     prisma.untrackedCategory.findMany({
+      where: { year: requestedYear.data },
       orderBy: { order: 'asc' },
       include: {
         tags: {
@@ -54,7 +59,9 @@ export async function GET(request: NextRequest) {
     prisma.transaction.findMany({
       where: {
         date: { gte: range.start, lte: range.end },
-        OR: [{ debit: { gt: 0 } }, { credit: { gt: 0 } }],
+        // Untracked categories describe spending. Credits such as salary or
+        // other income must not appear in the uncategorized spending list.
+        debit: { gt: 0 },
         archived: false,
       },
       include: {
@@ -80,30 +87,15 @@ export async function GET(request: NextRequest) {
       category,
       directIds,
       expanded: collectDescendantTagIds(directIds, childrenMap),
-      key: `${category.name}\u0000${directIds.join(',')}`,
+      key: category.id,
     };
   });
-  const categoriesByBudget = new Map(
-    budgets.map((budget) => [
-      budget.id,
-      categoryData.filter((entry) => entry.category.budgetId === budget.id),
-    ]),
-  );
-  const relevantBudgetIds = new Set(
-    budgets
-      .filter((budget, index) => {
-        const next = budgets[index + 1]?.startDate;
-        return budget.startDate <= range.end && (!next || next > range.start);
-      })
-      .map((budget) => budget.id),
-  );
-  if (requestedBudgetId) relevantBudgetIds.add(requestedBudgetId);
   const aggregate = new Map<
     string,
     { representative: (typeof categoryData)[number]; spending: number }
   >();
   for (const entry of categoryData) {
-    if (relevantBudgetIds.has(entry.category.budgetId) && !aggregate.has(entry.key)) {
+    if (!aggregate.has(entry.key)) {
       aggregate.set(entry.key, { representative: entry, spending: 0 });
     }
   }
@@ -116,11 +108,7 @@ export async function GET(request: NextRequest) {
       ? isFullyTracked(tagIds, coveredByBudget.get(budget.id) ?? new Set<string>())
       : false;
     if (tracked) continue;
-    const match = budget
-      ? (categoriesByBudget.get(budget.id) ?? []).find((entry) =>
-          tagIds.some((tagId) => entry.expanded.has(tagId)),
-        )
-      : undefined;
+    const match = categoryData.find((entry) => tagIds.some((tagId) => entry.expanded.has(tagId)));
     if (match) {
       const item = aggregate.get(match.key) ?? { representative: match, spending: 0 };
       item.spending += transaction.debit - transaction.credit;
@@ -133,7 +121,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     categories: [...aggregate.values()].map(({ representative, spending }) => ({
       id: representative.category.id,
-      budgetId: representative.category.budgetId,
+      year: representative.category.year,
       name: representative.category.name,
       order: representative.category.order,
       tags: representative.category.tags.map((entry) => entry.tag),
@@ -153,22 +141,20 @@ export async function POST(request: NextRequest) {
   const body = await readJson(request, createSchema);
   if (!body.success) return body.response;
   const result = await prisma.$transaction(async (tx) => {
-    const [budget, tags] = await Promise.all([
-      tx.budget.findUnique({ where: { id: body.data.budgetId }, select: { id: true } }),
+    const [tags] = await Promise.all([
       tx.tag.findMany({
         where: { id: { in: body.data.tagIds }, isSource: false },
         select: { id: true },
       }),
     ]);
-    if (!budget) return { kind: 'budget' as const };
     if (tags.length !== body.data.tagIds.length) return { kind: 'tags' as const };
     const maximum = await tx.untrackedCategory.aggregate({
-      where: { budgetId: body.data.budgetId },
+      where: { year: body.data.year },
       _max: { order: true },
     });
     const category = await tx.untrackedCategory.create({
       data: {
-        budgetId: body.data.budgetId,
+        year: body.data.year,
         name: body.data.name,
         order: body.data.order ?? (maximum._max.order ?? -1) + 1,
         tags: { create: tags.map((tag) => ({ tagId: tag.id })) },
@@ -177,8 +163,6 @@ export async function POST(request: NextRequest) {
     });
     return { kind: 'ok' as const, category };
   });
-  if (result.kind === 'budget')
-    return NextResponse.json({ error: 'Budget not found' }, { status: 404 });
   if (result.kind === 'tags')
     return NextResponse.json({ error: 'All tagIds must be category tags' }, { status: 400 });
   return NextResponse.json(

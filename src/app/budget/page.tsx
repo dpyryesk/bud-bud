@@ -47,7 +47,6 @@ export default function BudgetPage() {
   // Raw data from API
   const [summaryLines, setSummaryLines] = useState<BudgetSummaryLine[]>([]);
   const [activeBudget, setActiveBudget] = useState<Budget | null>(null);
-  const [latestBudgetId, setLatestBudgetId] = useState<string | null>(null);
   const [tags, setTags] = useState<TagOptionWithLevel[]>([]);
   const [loading, setLoading] = useState(false);
   const [importingTags, setImportingTags] = useState(false);
@@ -149,22 +148,8 @@ export default function BudgetPage() {
     }
   }, []);
 
-  const fetchLatestBudget = useCallback(async () => {
-    try {
-      const res = await fetch('/api/budgets');
-      if (!res.ok) {
-        setLatestBudgetId(null);
-        return;
-      }
-      const budgets = (await res.json()) as Budget[];
-      setLatestBudgetId(budgets.at(-1)?.id ?? null);
-    } catch {
-      setLatestBudgetId(null);
-    }
-  }, []);
-
   const refresh = useCallback(async () => {
-    const [summary] = await Promise.all([fetchSummary(), fetchLatestBudget()]);
+    const summary = await fetchSummary();
     const lines = summary.lines;
     const cats = await fetchCategories(summary.activeBudget?.id ?? null);
     setOrderedCategories(cats);
@@ -180,7 +165,7 @@ export default function BudgetPage() {
         .filter((l) => l.budgetLine.categoryId === null)
         .sort((a, b) => a.budgetLine.order - b.budgetLine.order),
     );
-  }, [fetchCategories, fetchLatestBudget, fetchSummary]);
+  }, [fetchCategories, fetchSummary]);
 
   const parseErrorMessage = useCallback(async (res: Response) => {
     try {
@@ -597,7 +582,7 @@ export default function BudgetPage() {
 
       {/* Yearly Untracked Spending */}
       <UntrackedCategoriesSection
-        creationBudgetId={latestBudgetId}
+        year={yearPeriod.start.getFullYear()}
         period={yearPeriod}
         totalYearlyNetIncome={totalYearlyNetIncome}
         availableTags={tags}
@@ -609,11 +594,12 @@ export default function BudgetPage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base font-semibold">Untracked Transactions</CardTitle>
           <p className="text-muted-foreground text-sm">
-            Debit transactions with no tag or with a tag not assigned to any budget line.
+            Debit transactions with no tag or with a tag not assigned to a budget line or untracked
+            category.
           </p>
         </CardHeader>
-        <CardContent className="p-0">
-          <TransactionsTable extraParams={{ unbudgeted: 'true' }} />
+        <CardContent className="px-4 pb-4">
+          <TransactionsTable extraParams={{ unbudgeted: 'true', uncategorizedOnly: 'true' }} />
         </CardContent>
       </Card>
 

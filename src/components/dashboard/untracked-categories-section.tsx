@@ -18,8 +18,7 @@ import type {
 import type { TagOptionWithLevel } from '@/components/budget/constants';
 
 interface UntrackedCategoriesSectionProps {
-  budgetId?: string | null;
-  creationBudgetId?: string | null;
+  year: number;
   period: TimePeriod;
   totalYearlyNetIncome: number;
   availableTags: TagOptionWithLevel[];
@@ -36,15 +35,13 @@ function pct(value: number, total: number): string {
 }
 
 export function UntrackedCategoriesSection({
-  budgetId,
-  creationBudgetId,
+  year,
   period,
   totalYearlyNetIncome,
   availableTags,
   title = 'Untracked Spending',
   onDataChange,
 }: UntrackedCategoriesSectionProps) {
-  const targetBudgetId = creationBudgetId === undefined ? budgetId : creationBudgetId;
   const [categories, setCategories] = useState<UntrackedCategoryWithSpending[]>([]);
   const [totalTrulyUncategorized, setTotalTrulyUncategorized] = useState(0);
   const [trulyUncategorizedTransactions, setTrulyUncategorizedTransactions] = useState<
@@ -72,9 +69,7 @@ export function UntrackedCategoriesSection({
           start: format(period.start, 'yyyy-MM-dd'),
           end: format(period.end, 'yyyy-MM-dd'),
         });
-        if (budgetId) {
-          params.set('budgetId', budgetId);
-        }
+        params.set('year', String(year));
         const res = await fetch(`/api/untracked-categories?${params}`, { signal });
         if (res.ok) {
           const data = (await res.json()) as UntrackedCategoriesResponse;
@@ -87,7 +82,7 @@ export function UntrackedCategoriesSection({
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [budgetId, period, onDataChange],
+    [year, period, onDataChange],
   );
 
   useEffect(() => {
@@ -152,7 +147,6 @@ export function UntrackedCategoriesSection({
               setEditingCategory(null);
               setDialogOpen(true);
             }}
-            disabled={!targetBudgetId}
           >
             <Plus className="mr-2 h-4 w-4" />
             New Category
@@ -278,7 +272,7 @@ export function UntrackedCategoriesSection({
       <UntrackedCategoryDialog
         open={dialogOpen}
         onOpenChange={handleDialogOpenChange}
-        budgetId={targetBudgetId ?? null}
+        year={year}
         editingCategory={editingCategory}
         availableTags={availableTags}
         onSuccess={handleSuccess}
