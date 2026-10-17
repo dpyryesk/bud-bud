@@ -175,7 +175,7 @@ export default function ImportPreviewStep({
                                       {sourceValueTagFor(row.source)!.name}
                                     </span>
                                   ) : (
-                                    <span className="text-muted-foreground">â€”</span>
+                                    <span className="text-muted-foreground">&mdash;</span>
                                   )}
                                 </TableCell>
                               )}
